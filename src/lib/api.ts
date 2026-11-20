@@ -9,6 +9,14 @@ export class ApiError extends Error {
   }
 }
 
+// Сервер недоступен или ответил 5xx — это не «сессия истекла» и не «нет прав».
+// Отдельный класс нужен, чтобы UI не отправлял человека на экран входа зря.
+export class TransportError extends Error {
+  constructor(message = 'Сервер недоступен. Проверьте соединение и повторите.') {
+    super(message);
+  }
+}
+
 async function parseError(response: Response): Promise<string> {
   try {
     const data = (await response.json()) as { error?: string };
@@ -23,12 +31,18 @@ async function parseError(response: Response): Promise<string> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    headers: init?.body ? { 'content-type': 'application/json' } : undefined,
-    ...init,
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      credentials: 'same-origin',
+      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+      ...init,
+    });
+  } catch {
+    throw new TransportError();
+  }
   if (!response.ok) {
+    if (response.status >= 500) throw new TransportError();
     throw new ApiError(await parseError(response), response.status);
   }
   if (response.status === 204) return undefined as T;

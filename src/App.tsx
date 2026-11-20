@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, TransportError } from '@/lib/api';
 import type { SessionUser } from '@shared/types';
 import { AppShell } from '@/components/layout/AppShell';
 import LoginPage from '@/pages/Login';
@@ -38,6 +38,7 @@ export function useAuth(): AuthContextValue {
 type AuthState =
   | { status: 'loading' }
   | { status: 'anonymous' }
+  | { status: 'offline' }
   | { status: 'ready'; user: SessionUser };
 
 export default function App() {
@@ -46,8 +47,11 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const [authAttempt, setAuthAttempt] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
+    setAuth({ status: 'loading' });
     api
       .get<SessionUser>('/api/me')
       .then((user) => {
@@ -55,13 +59,19 @@ export default function App() {
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        if (error instanceof ApiError && error.status === 401) setAuth({ status: 'anonymous' });
-        else setAuth({ status: 'anonymous' });
+        // 401 — действительно нет сессии. Всё остальное (сеть, 5xx) — не повод
+        // показывать форму входа: человек не «разлогинен», сервер недоступен.
+        if (error instanceof ApiError && error.status === 401) {
+          setAuth({ status: 'anonymous' });
+          return;
+        }
+        setAuth({ status: 'offline' });
+        if (error instanceof TransportError) console.warn(error.message);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authAttempt]);
 
   const refreshUnread = useCallback(async () => {
     try {
@@ -92,6 +102,27 @@ export default function App() {
     return (
       <div className="mx-auto max-w-3xl p-4">
         <SkeletonCard rows={4} />
+      </div>
+    );
+  }
+
+  if (auth.status === 'offline') {
+    return (
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">
+        <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5 text-center">
+          <h1 className="text-lg font-semibold">Сервер недоступен</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Кабинет не открылся: нет ответа от сервера. Это не выход из аккаунта — данные и сессия
+            сохранены.
+          </p>
+          <button
+            type="button"
+            onClick={() => setAuthAttempt((attempt) => attempt + 1)}
+            className="mt-4 h-11 w-full rounded-[8px] bg-[var(--accent)] px-4 text-sm font-medium text-white"
+          >
+            Повторить
+          </button>
+        </div>
       </div>
     );
   }

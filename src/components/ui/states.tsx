@@ -30,10 +30,18 @@ export function ErrorState({
   message: string;
   onRetry?: () => void;
 }) {
+  const offline = message.includes('Сервер недоступен');
   return (
-    <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
-      <p className="text-sm font-medium text-[var(--fg)]">Не удалось загрузить</p>
-      <p className="mt-1 text-sm text-[var(--muted)]">{message}</p>
+    <div
+      className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6 text-center"
+      role="alert"
+    >
+      <p className="text-sm font-medium text-[var(--fg)]">
+        {offline ? 'Сервер недоступен' : 'Не удалось загрузить'}
+      </p>
+      <p className="mt-1 text-sm text-[var(--muted)]">
+        {offline ? 'Данные не потеряны: повторите попытку, когда связь вернётся.' : message}
+      </p>
       {onRetry ? (
         <button
           type="button"
