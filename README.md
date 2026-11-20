@@ -67,8 +67,10 @@ npm start                     # API и статика на :8787
 | `docs/09-jury-description.md` | готовый текст описания работы для жюри |
 | `docs/10-deploy.md` | деплой на VPS и приёмка |
 | `deploy/` | `install.sh`, unit-файл systemd, Caddyfile |
-| `docs/11-video-script.md` | сценарий видео на 5 минут |
+| `docs/11-video-script.md` | сценарий видео и запись через `record:demo` |
+| `docs/12-submission-checklist.md` | чек-лист отправки: документы, хостинг, репозиторий |
 | `docs/jury.pdf` | готовый PDF для жюри (собирается: `npm run build:jury`) |
+| `docs/demo/demo.mp4` | демонстрация работы (запись: `npm run record:demo`) |
 
 ## Лицензии
 

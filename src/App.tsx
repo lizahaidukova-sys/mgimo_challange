@@ -132,7 +132,7 @@ export default function App() {
     return (
       <>
         <LoginPage onSuccess={(user) => setAuth({ status: 'ready', user })} />
-        <Toaster position="top-center" richColors closeButton />
+        <Toaster position="bottom-center" richColors closeButton />
       </>
     );
   }
@@ -167,7 +167,7 @@ export default function App() {
           )}
         </Route>
       </Routes>
-      <Toaster position="top-center" richColors closeButton />
+      <Toaster position="bottom-center" richColors closeButton />
     </AuthContext.Provider>
   );
 }

@@ -18,7 +18,8 @@
     "verify:secrets": "tsx scripts/verify-secrets.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run verify:rules && npm run verify:secrets && npm run verify:idor",
-    "build:jury": "tsx scripts/build-jury-pdf.ts"
+    "build:jury": "tsx scripts/build-jury-pdf.ts",
+    "record:demo": "node scripts/record-demo.mjs --out docs/demo"
   },
   "keywords": [],
   "author": "",
@@ -51,6 +52,7 @@
     "concurrently": "^10.0.7",
     "cross-env": "^10.1.0",
     "marked": "^18.2.1",
+    "puppeteer-core": "^25.18.1",
     "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

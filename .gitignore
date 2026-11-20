@@ -32,3 +32,6 @@ npm-debug.log*
 coverage/
 playwright-report/
 test-results/
+
+# кадры записи видео — промежуточные
+docs/demo/frames/

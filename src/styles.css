@@ -87,3 +87,14 @@ a {
     padding-bottom: 32px;
   }
 }
+
+/* Тост над нижней навигацией и safe-area, иначе он закрывает пункты меню. */
+[data-sonner-toaster][data-y-position='bottom'] {
+  bottom: calc(84px + env(safe-area-inset-bottom)) !important;
+}
+
+@media (min-width: 768px) {
+  [data-sonner-toaster][data-y-position='bottom'] {
+    bottom: 24px !important;
+  }
+}
