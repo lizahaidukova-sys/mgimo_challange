@@ -14,7 +14,7 @@
 
 Кабинет собран вокруг одного экрана: что сегодня, что изменилось, как дела с сессией, что с заявками.
 
-![Главная на телефоне 360 px](screenshots/02-dashboard.png)
+![Главная на телефоне](screenshots/doc/dashboard.png)
 
 ## 2. Почему выбраны именно эти разделы
 
@@ -32,7 +32,7 @@
 - **Заявка как трекер.** Статусы, обещанный срок в рабочих днях, обязательная причина отказа, история.
 - **«Что изменилось».** Дифф с прошлого визита: перенос, оценка, статус заявки, объявление.
 
-![Светофор: жёлтый, первый студент](screenshots/02-dashboard.png)
+![Светофор: жёлтый, первый студент](screenshots/doc/dashboard.png)
 
 ![Светофор: красный, второй студент](screenshots/16-desktop-dashboard.png)
 
@@ -110,17 +110,19 @@
 | Расписание, неделя | `screenshots/04-schedule-week.png` |
 | Успеваемость и светофор | `screenshots/05-grades.png` |
 | Заявки | `screenshots/06-requests.png` |
-| Новая заявка | `screenshots/07-new-request.png` |
-| Заявка и история | `screenshots/08-request-detail.png` |
+| Новая заявка | `screenshots/doc/new-request.png` |
+| Заявка и история | `screenshots/doc/request.png` |
 | Уведомления | `screenshots/09-notifications.png` |
 | Профиль | `screenshots/10-profile.png` |
-| Сводка деканата | `screenshots/11-staff-overview.png` |
-| Очередь заявок | `screenshots/12-staff-queue.png` |
-| Заявка в работе у сотрудника | `screenshots/13-staff-request.png` |
-| Публикация объявления | `screenshots/14-staff-announcement.png` |
-| Правка пары | `screenshots/15a-staff-schedule.png` |
+| Сводка деканата | `screenshots/doc/staff.png` |
+| Очередь заявок | `screenshots/doc/queue.png` |
+| Заявка в работе у сотрудника | `screenshots/doc/staff-request.png` |
+| Публикация объявления | `screenshots/doc/announcement.png` |
+| Правка пары | `screenshots/doc/staff-schedule.png` |
 | Десктоп: главная | `screenshots/16-desktop-dashboard.png` |
 | Десктоп: очередь | `screenshots/15-desktop-staff-queue.png` |
+
+Полные кадры в натуральную высоту — в папке `docs/screenshots`; в документе показаны первые экраны, чтобы читались в PDF.
 
 ## 7. Как устроены вход, хранение и защита — простыми словами
 

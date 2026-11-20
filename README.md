@@ -67,6 +67,7 @@ npm start                     # API и статика на :8787
 | `docs/09-jury-description.md` | готовый текст описания работы для жюри |
 | `docs/10-deploy.md` | деплой на VPS и приёмка |
 | `docs/11-video-script.md` | сценарий видео на 5 минут |
+| `docs/jury.pdf` | готовый PDF для жюри (собирается: `npm run build:jury`) |
 
 ## Лицензии
 

@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { FieldError, Input, Label, Select, Textarea } from '@/components/ui/input';
 import { EmptyState, ErrorState, SkeletonCard } from '@/components/ui/states';
-import { formatDate, formatTime } from '@/lib/utils';
+import { cn, formatDate, formatTime, formatWeekday } from '@/lib/utils';
 
 interface StaffLesson {
   id: number;
@@ -35,6 +35,19 @@ export default function StaffSchedulePage() {
 
   useEffect(load, []);
 
+  // Группировка по дню: плоская лента из 12 карточек не даёт понять, где кончается день.
+  const grouped = useMemo(() => {
+    if (!rows) return [] as [string, StaffLesson[]][];
+    const map = new Map<string, StaffLesson[]>();
+    for (const row of rows) {
+      const key = new Date(row.starts_at).toISOString().slice(0, 10);
+      const list = map.get(key) ?? [];
+      list.push(row);
+      map.set(key, list);
+    }
+    return [...map.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
+  }, [rows]);
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold sm:text-2xl">Пары на две недели</h1>
@@ -50,34 +63,53 @@ export default function StaffSchedulePage() {
         rows.length === 0 ? (
           <EmptyState title="Пар в этом периоде нет" />
         ) : (
-          <ul className="space-y-2">
-            {rows.map((row) => (
-              <li key={row.id}>
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">{row.course_title}</p>
-                        <p className="mt-0.5 text-xs text-[var(--muted)]">
-                          {row.group_name} · {formatDate(row.starts_at)} · {formatTime(row.starts_at)}–
-                          {formatTime(row.ends_at)}
-                        </p>
-                        {row.status !== 'normal' ? (
-                          <p className="mt-1 text-xs font-medium text-[var(--warning)]">
-                            {row.status === 'cancelled' ? 'Отменено' : 'Перенесено'}
-                            {row.note ? `: ${row.note}` : ''}
-                          </p>
-                        ) : null}
-                      </div>
-                      <Button size="sm" variant="secondary" onClick={() => setSelected(row)}>
-                        Изменить
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </li>
+          <div className="space-y-5">
+            {grouped.map(([key, lessons]) => (
+              <section key={key} aria-label={formatWeekday(lessons[0]!.starts_at)}>
+                <h2 className="mb-2 flex items-baseline gap-2 text-sm font-semibold">
+                  {formatWeekday(lessons[0]!.starts_at)}
+                  <span className="text-xs font-normal text-[var(--muted)]">
+                    {formatDate(lessons[0]!.starts_at)}
+                  </span>
+                </h2>
+                <ul className="space-y-2">
+                  {lessons.map((row) => (
+                    <li key={row.id}>
+                      <Card>
+                        <CardContent className="pt-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium tabular-nums">
+                                {formatTime(row.starts_at)}–{formatTime(row.ends_at)}
+                              </p>
+                              <p className="mt-0.5 text-sm">{row.course_title}</p>
+                              <p className="mt-0.5 text-xs text-[var(--muted)]">{row.group_name}</p>
+                              {row.status !== 'normal' ? (
+                                <p
+                                  className={cn(
+                                    'mt-1 text-xs font-medium',
+                                    row.status === 'cancelled'
+                                      ? 'text-[var(--error)]'
+                                      : 'text-[var(--warning)]',
+                                  )}
+                                >
+                                  {row.status === 'cancelled' ? 'Отменено' : 'Перенесено'}
+                                  {row.note ? `: ${row.note}` : ''}
+                                </p>
+                              ) : null}
+                            </div>
+                            <Button size="sm" variant="secondary" onClick={() => setSelected(row)}>
+                              Изменить
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )
       ) : null}
 
