@@ -103,7 +103,9 @@ app.post('/api/login', (req, res) => {
 
   // Одинаковый ответ для «нет пользователя» и «неверный пароль».
   if (!row || !verifyPassword(parsed.data.password, row.password_hash)) {
-    if (row) noteLoginFailure(email);
+    // Считаем попытки и для несуществующего адреса: иначе перебор по базе
+    // адресов шёл бы без ограничения.
+    noteLoginFailure(email);
     audit(null, 'login.failed', 'user', row?.id ?? null, {});
     res.status(401).json({ error: 'Неверный e-mail или пароль' });
     return;

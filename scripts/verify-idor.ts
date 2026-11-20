@@ -54,19 +54,53 @@ async function status(path: string, cookie?: string): Promise<number> {
   return response.status;
 }
 
+// Временная база проверок не должна попадать в коммит.
+// На Windows файл может оставаться заблокированным до выхода процесса — ошибку игнорируем.
+async function cleanupVerifyDb(): Promise<void> {
+  // Windows отпускает handles не мгновенно после выхода процесса — пробуем несколько раз.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    let remaining = false;
+    for (const suffix of ['', '-wal', '-shm']) {
+      const file = `${VERIFY_DB}${suffix}`;
+      if (!existsSync(file)) continue;
+      try {
+        rmSync(file);
+      } catch {
+        remaining = true;
+      }
+    }
+    if (!remaining) return;
+    await wait(300);
+  }
+}
+
+function runOnce(args: string[], env: NodeJS.ProcessEnv): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(process.execPath, args, { env, stdio: 'ignore' });
+    proc.once('error', reject);
+    proc.once('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${args.join(' ')} завершился с кодом ${code}`));
+    });
+  });
+}
+
 const results: { name: string; ok: boolean; detail: string }[] = [];
 function check(name: string, ok: boolean, detail: string): void {
   results.push({ name, ok, detail });
 }
 
 async function main(): Promise<void> {
-  const { seed } = await import('../db/seed');
-  seed();
+  // Сид и сервер запускаются отдельными процессами: родитель не должен
+  // открывать файл временной базы, иначе на Windows его нельзя удалить.
+  const env = { ...process.env, PORT: String(PORT), DATABASE_PATH: VERIFY_DB, NODE_ENV: 'test' };
+  await runOnce(['node_modules/tsx/dist/cli.mjs', 'scripts/seed.ts'], env);
 
-  const child = spawn('npx', ['tsx', 'server/index.ts'], {
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH: VERIFY_DB, NODE_ENV: 'test' },
+  // Запускаем tsx напрямую, без shell: иначе kill() убивает обёртку,
+  // а сервер продолжает держать порт и остаётся старым кодом.
+  const child = spawn(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'server/index.ts'], {
+    env,
     stdio: 'ignore',
-    shell: process.platform === 'win32',
   });
 
   try {
@@ -167,6 +201,18 @@ async function main(): Promise<void> {
       `получили ${rejection.status}`,
     );
 
+    // Лимит попыток должен работать и для несуществующих адресов.
+    let limited = 0;
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      const response = await fetch(`${BASE}/api/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'nobody@demo.local', password: `bad${attempt}` }),
+      });
+      limited = response.status;
+    }
+    check('перебор по неизвестному адресу упирается в лимит', limited === 429, `11-я попытка: ${limited}`);
+
     // Ответ на чужой запрос не должен раскрывать существование ресурса.
     const foreign = await fetch(`${BASE}/api/requests/3`, { headers: { cookie: cookieA } });
     const foreignBody = (await foreign.text()).trim();
@@ -181,8 +227,11 @@ async function main(): Promise<void> {
     child.kill();
     // Ждём завершения: на Windows файл базы остаётся заблокированным до выхода процесса.
     await new Promise<void>((resolve) => {
-      child.once('exit', () => resolve());
-      setTimeout(resolve, 3000);
+      const timer = setTimeout(resolve, 5000);
+      child.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
+      });
     });
   }
 
@@ -195,14 +244,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   console.log(`\nВсе проверки пройдены: ${results.length}`);
-  // Временная база проверок не должна попадать в коммит; ошибку удаления игнорируем.
-  for (const suffix of ['', '-wal', '-shm']) {
-    try {
-      if (existsSync(`${VERIFY_DB}${suffix}`)) rmSync(`${VERIFY_DB}${suffix}`);
-    } catch {
-      // файл ещё держит процесс — он уже в .gitignore
-    }
-  }
+  await cleanupVerifyDb();
 }
 
 void main();
