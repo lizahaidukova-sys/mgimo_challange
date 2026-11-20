@@ -470,15 +470,16 @@ export function dashboard(user: SessionUser): DashboardData {
   const weekEnd = addDays(weekStart, 7);
   const week = lessonsForRange(user.groupName, weekStart.toISOString(), weekEnd.toISOString());
 
-  const seen = db
-    .prepare(`SELECT last_seen_at FROM users WHERE id = ?`)
-    .get(user.id) as { last_seen_at: string | null };
-  const since = seen.last_seen_at ?? addDays(now, -3).toISOString();
-
-  const sinceMs = new Date(since).getTime();
+  // Окно изменений фиксировано: последние трое суток. Так блок не зависит от
+  // скрытого «последнего визита» и не пустеет при повторном открытии.
+  const sinceMs = addDays(now, -3).getTime();
   const changes: DashboardData['changes'] = [];
   for (const lesson of week) {
-    if (lesson.status !== 'normal' && lesson.previousStartsAt && lesson.startsAt >= since) {
+    if (
+      lesson.status !== 'normal' &&
+      lesson.previousStartsAt !== null &&
+      new Date(lesson.startsAt).getTime() >= sinceMs
+    ) {
       changes.push({
         id: `lesson-${lesson.id}`,
         kind: 'schedule',
@@ -489,7 +490,7 @@ export function dashboard(user: SessionUser): DashboardData {
     }
   }
   for (const grade of grades(user.id)) {
-    if (grade.grade !== null && grade.updatedAt >= since) {
+    if (grade.grade !== null && new Date(grade.updatedAt).getTime() >= sinceMs) {
       changes.push({
         id: `grade-${grade.enrollmentId}`,
         kind: 'grade',
@@ -529,13 +530,6 @@ export function dashboard(user: SessionUser): DashboardData {
   );
 
   const upcoming = nextLesson(user.groupName, now.toISOString());
-
-  // Точку отсчёта двигаем не чаще раза в 30 минут: иначе повторное открытие
-  // главной во время демонстрации обнуляло бы список изменений.
-  const lastSeenMs = seen.last_seen_at ? new Date(seen.last_seen_at).getTime() : 0;
-  if (now.getTime() - lastSeenMs > 30 * 60 * 1000) {
-    db.prepare(`UPDATE users SET last_seen_at = ? WHERE id = ?`).run(now.toISOString(), user.id);
-  }
 
   return {
     user,

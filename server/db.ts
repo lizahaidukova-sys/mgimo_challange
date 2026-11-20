@@ -23,7 +23,6 @@ export function migrate(): void {
       program TEXT NOT NULL DEFAULT '',
       course INTEGER NOT NULL DEFAULT 1,
       group_name TEXT NOT NULL DEFAULT '',
-      last_seen_at TEXT,
       created_at TEXT NOT NULL
     );
 

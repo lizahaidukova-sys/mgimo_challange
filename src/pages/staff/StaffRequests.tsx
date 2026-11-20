@@ -38,7 +38,7 @@ export default function StaffRequestsPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold sm:text-2xl">Очередь заявок</h1>
 
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex flex-wrap gap-1.5">
         {filters.map((filter) => (
           <button
             key={filter.value}

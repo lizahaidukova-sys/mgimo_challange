@@ -113,8 +113,6 @@ app.post('/api/login', (req, res) => {
 
   clearLoginFailures(email);
   createSession(res, row.id);
-  // last_seen_at обновляется только при просмотре главной: иначе «что изменилось»
-  // теряет точку отсчёта сразу после входа.
   audit(row.id, 'login.success', 'user', row.id, {});
   res.json({ ok: true, role: row.role });
 });
