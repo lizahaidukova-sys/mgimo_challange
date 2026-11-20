@@ -83,6 +83,33 @@ export function AppShell() {
         </div>
       </header>
 
+      <nav
+        className="sticky top-14 z-20 hidden border-b border-[var(--border)] bg-[var(--surface)] md:block"
+        aria-label="Разделы"
+      >
+        <ul className="mx-auto flex max-w-3xl gap-1 px-4">
+          {nav.map((item) => (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn(
+                    'flex h-11 items-center gap-2 border-b-2 px-3 text-sm font-medium',
+                    isActive
+                      ? 'border-[var(--accent)] text-[var(--accent)]'
+                      : 'border-transparent text-[var(--muted)] hover:text-[var(--fg)]',
+                  )
+                }
+              >
+                <item.icon className="size-4" />
+                {item.label}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
       <main className="app-main mx-auto max-w-3xl px-4 py-4">
         <Outlet />
         <footer className="mt-8 border-t border-[var(--border)] pt-4 text-xs leading-relaxed text-[var(--muted)]">
@@ -120,32 +147,6 @@ export function AppShell() {
         </ul>
       </nav>
 
-      <nav
-        className="hidden border-b border-[var(--border)] bg-[var(--surface)] md:block"
-        aria-label="Разделы"
-      >
-        <ul className="mx-auto flex max-w-3xl gap-1 px-4">
-          {nav.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  cn(
-                    'flex h-11 items-center gap-2 border-b-2 px-3 text-sm font-medium',
-                    isActive
-                      ? 'border-[var(--accent)] text-[var(--accent)]'
-                      : 'border-transparent text-[var(--muted)] hover:text-[var(--fg)]',
-                  )
-                }
-              >
-                <item.icon className="size-4" />
-                {item.label}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
     </div>
   );
 }

@@ -44,6 +44,7 @@ export default function StaffOverviewPage() {
           <CardContent className="pt-4">
             <p className="text-xs text-[var(--muted)]">Новые</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">{data.byStatus.submitted}</p>
+            <p className="text-xs text-[var(--muted)]">сегодня {data.todayRequests}</p>
           </CardContent>
         </Card>
         <Card>

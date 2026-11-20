@@ -281,9 +281,10 @@ export function staffQueue(status?: RequestStatus): StaffRequestRow[] {
 }
 
 export function staffOverview(): StaffOverview {
-  const rows = db.prepare(`SELECT status, due_at FROM requests`).all() as {
+  const rows = db.prepare(`SELECT status, due_at, created_at FROM requests`).all() as {
     status: RequestStatus;
     due_at: string;
+    created_at: string;
   }[];
   const byStatus: Record<RequestStatus, number> = {
     submitted: 0,
@@ -305,8 +306,9 @@ export function staffOverview(): StaffOverview {
       overdue += 1;
     }
     if (row.status === 'submitted') {
-      if (!oldest || row.due_at < oldest) oldest = row.due_at;
-      if (row.due_at >= todayStart) todayRequests += 1;
+      // «Старейшая новая» — по времени подачи, а не по сроку: это разные вещи.
+      if (!oldest || row.created_at < oldest) oldest = row.created_at;
+      if (row.created_at >= todayStart) todayRequests += 1;
     }
   }
 
