@@ -76,7 +76,10 @@ async function cleanupVerifyDb(): Promise<void> {
 
 function runOnce(args: string[], env: NodeJS.ProcessEnv): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(process.execPath, args, { env, stdio: 'ignore' });
+    const proc = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', ...args], {
+      env,
+      stdio: 'ignore',
+    });
     proc.once('error', reject);
     proc.once('exit', (code) => {
       if (code === 0) resolve();
@@ -93,15 +96,22 @@ function check(name: string, ok: boolean, detail: string): void {
 async function main(): Promise<void> {
   // Сид и сервер запускаются отдельными процессами: родитель не должен
   // открывать файл временной базы, иначе на Windows его нельзя удалить.
-  const env = { ...process.env, PORT: String(PORT), DATABASE_PATH: VERIFY_DB, NODE_ENV: 'test' };
+  const env = {
+    ...process.env,
+    PORT: String(PORT),
+    DATABASE_PATH: VERIFY_DB,
+    NODE_ENV: 'test',
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --disable-warning=ExperimentalWarning`.trim(),
+  };
   await runOnce(['node_modules/tsx/dist/cli.mjs', 'scripts/seed.ts'], env);
 
   // Запускаем tsx напрямую, без shell: иначе kill() убивает обёртку,
   // а сервер продолжает держать порт и остаётся старым кодом.
-  const child = spawn(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'server/index.ts'], {
-    env,
-    stdio: 'ignore',
-  });
+  const child = spawn(
+    process.execPath,
+    ['--disable-warning=ExperimentalWarning', 'node_modules/tsx/dist/cli.mjs', 'server/index.ts'],
+    { env, stdio: 'ignore' },
+  );
 
   try {
     await waitForServer();

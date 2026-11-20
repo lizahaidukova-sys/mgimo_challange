@@ -1,0 +1,19 @@
+# Замените домен на свой. Caddy сам получит сертификат Let's Encrypt.
+# Если домена нет — используйте http://<IP>:8787 напрямую и оставьте APP_ORIGIN пустым.
+
+dean.example.ru {
+	encode gzip
+	reverse_proxy 127.0.0.1:8787
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		-Server
+	}
+
+	# Статика кэшируется, HTML — нет: иначе после reseed жюри видит старую сборку.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	header / Cache-Control "no-store"
+}

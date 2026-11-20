@@ -1,4 +1,4 @@
-import { db } from '../server/db';
+import { db, transaction } from '../server/db';
 import { hashPassword } from '../server/auth';
 import { mskTime, startOfMskWeek, mskWeekday } from '../server/time';
 
@@ -25,7 +25,7 @@ export function seed(): void {
   const now = new Date();
   const passwordHash = hashPassword(DEMO_PASSWORD);
 
-  const reset = db.transaction(() => {
+  transaction(() => {
     for (const table of [
       'audit_log',
       'notifications',
@@ -44,7 +44,6 @@ export function seed(): void {
     }
     db.prepare(`DELETE FROM sqlite_sequence`).run();
   });
-  reset();
 
   const insertUser = db.prepare(
     `INSERT INTO users (email, password_hash, role, full_name, faculty, program, course, group_name, created_at)

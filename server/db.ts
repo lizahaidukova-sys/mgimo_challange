@@ -1,15 +1,32 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
+
+// Встроенный модуль node:sqlite (Node 22.5+): без нативной сборки,
+// без node-gyp и без prebuilt-бинарников под конкретную платформу.
+// Поэтому `npm ci` на чистой машине не требует Visual Studio или компилятора.
 
 const dbPath = process.env.DATABASE_PATH ?? './data/app.db';
 if (dbPath !== ':memory:') {
   fs.mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
 }
 
-export const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+export const db = new DatabaseSync(dbPath);
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA foreign_keys = ON');
+
+// Обёртка над транзакцией: node:sqlite не имеет db.transaction(), как у better-sqlite3.
+export function transaction<T>(fn: () => T): T {
+  db.exec('BEGIN');
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
 
 export function migrate(): void {
   db.exec(`

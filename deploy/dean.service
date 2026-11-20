@@ -1,0 +1,25 @@
+[Unit]
+Description=Digital Dean prototype (MGIMO AI Challenge concept)
+After=network.target
+
+[Service]
+Type=simple
+User=dean
+Group=dean
+WorkingDirectory=/opt/dean/app
+EnvironmentFile=/opt/dean/app/.env
+Environment=NODE_ENV=production
+Environment=PORT=8787
+ExecStart=/usr/bin/npx tsx server/index.ts
+Restart=on-failure
+RestartSec=3
+
+# Минимальные привилегии: сервису нужен только собственный каталог.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/dean/app/data
+
+[Install]
+WantedBy=multi-user.target

@@ -442,13 +442,15 @@ export function markNotificationRead(userId: number, notificationId: number): bo
   const info = db
     .prepare(`UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ? AND read_at IS NULL`)
     .run(new Date().toISOString(), notificationId, userId);
-  return info.changes > 0;
+  return Number(info.changes) > 0;
 }
 
 export function markAllRead(userId: number): number {
-  return db
-    .prepare(`UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL`)
-    .run(new Date().toISOString(), userId).changes;
+  return Number(
+    db
+      .prepare(`UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL`)
+      .run(new Date().toISOString(), userId).changes,
+  );
 }
 
 export function unreadCount(userId: number): number {
