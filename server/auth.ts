@@ -21,6 +21,14 @@ if (!SESSION_SECRET) {
 }
 const SECRET = SESSION_SECRET || 'dev-only-insecure-secret';
 
+// Secure-cookie только по HTTPS. Если прототип открыт по http:// (IP без TLS),
+// флаг Secure не даст браузеру отправить cookie, и вход будет «молча» ломаться.
+function cookieIsSecure(): boolean {
+  const origin = process.env.APP_ORIGIN?.trim();
+  if (origin) return origin.startsWith('https://');
+  return process.env.NODE_ENV === 'production';
+}
+
 export interface AuthedRequest extends Request {
   user?: SessionUser;
   sessionId?: number;
@@ -60,7 +68,7 @@ export function createSession(res: Response, userId: number): string {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: cookieIsSecure(),
     path: '/',
     maxAge: SESSION_TTL_MS,
   });
