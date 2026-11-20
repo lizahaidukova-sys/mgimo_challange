@@ -174,10 +174,7 @@
 
 ```bash
 npm ci && npm run seed
-npm run verify:idor      # 15 проверок: изоляция, CSRF, лимит попыток
-npm run verify:rules     # границы светофора и приоритет долгов
-npm run verify:secrets   # секретов нет в репозитории и в бандле
-npm run typecheck
+npm run verify           # типы + правила + секреты + 15 проверок доступа
 ```
 
 ```
