@@ -1,0 +1,89 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --fg: #101828;
+  --muted: #667085;
+  --border: #e4e7ec;
+  --accent: #1d4ed8;
+  --accent-hover: #1e40af;
+  --accent-soft: #eff4ff;
+  --success: #067647;
+  --success-soft: #ecfdf3;
+  --warning: #b54708;
+  --warning-soft: #fffaeb;
+  --error: #b42318;
+  --error-soft: #fef3f2;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Длинные названия дисциплин и объявлений не должны ломать ширину. */
+h1,
+h2,
+h3,
+p,
+span,
+li,
+td,
+th,
+button,
+a {
+  overflow-wrap: anywhere;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Отступ снизу под нижнюю навигацию и safe-area на iPhone. */
+.app-main {
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .app-main {
+    padding-bottom: 32px;
+  }
+}
