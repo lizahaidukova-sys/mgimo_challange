@@ -71,9 +71,10 @@ flowchart LR
   N --> E[Аудит действий]
 ```
 
-- React 19 + Vite (TypeScript) на клиенте, Express 5 на сервере, Tailwind CSS v4, better-sqlite3, zod.
+- React 19 + Vite (TypeScript) на клиенте, Express 5 на сервере, Tailwind CSS v4, `node:sqlite` (встроен в Node 22.5+), zod.
 - Сессия — подписанная httpOnly cookie, роль в сервере, не в клиенте.
 - Все чтения и записи фильтруются по `session.userId`; идентификатор из URL никогда не принимается как основание доступа.
+- Нативных зависимостей нет: встроенный `node:sqlite` вместо better-sqlite3, поэтому `npm ci` не требует компилятора.
 - ИИ-помощник: правила → рекомендация; LLM вызывается только на сервере, если задан ключ, иначе шаблонный текст. Демо работает без ключа.
 - Деплой: `next build` (standalone) + systemd + Caddy (TLS), SQLite-файл вне git.
 

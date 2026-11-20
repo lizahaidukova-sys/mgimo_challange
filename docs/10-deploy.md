@@ -14,30 +14,35 @@
 
 ## 2. Порядок
 
-```bash
-# 1. Пользователь и папка
-sudo useradd -r -m -d /opt/dean dean || true
-sudo mkdir -p /opt/dean && sudo chown dean:dean /opt/dean
+Одной командой (идемпотентно, повторный запуск обновляет код):
 
-# 2. Код
+```bash
+REPO=https://github.com/<user>/<repo>.git DOMAIN=dean.example.ru bash deploy/install.sh
+```
+
+Скрипт делает всё из разделов 3–4: пользователя, Node, клон, `npm ci`, сборку,
+`.env` со случайным секретом, сид, systemd, Caddy. Если `DOMAIN` не задан —
+поднимает только приложение на `http://<IP>:8787`.
+
+Вручную, если нужен контроль на каждом шаге:
+
+```bash
+sudo useradd -r -m -d /opt/dean dean || true
+sudo mkdir -p /opt/dean/app && sudo chown -R dean:dean /opt/dean
 sudo -u dean git clone <repo> /opt/dean/app
 cd /opt/dean/app
-
-# 3. Зависимости и сборка
-sudo -u dean npm ci
+sudo -u dean npm ci            # без компилятора: нативных зависимостей нет
 sudo -u dean npm run build
-
-# 4. Конфигурация
 sudo -u dean cp .env.example .env
-# отредактировать: SESSION_SECRET (openssl rand -hex 32), DATABASE_PATH, APP_ORIGIN
+# вписать SESSION_SECRET (openssl rand -hex 32) и APP_ORIGIN
 sudo -u dean npm run seed
-
-# 5. Проверка вручную
 sudo -u dean PORT=8787 npm start
 curl -s localhost:8787/api/health
 ```
 
 ## 3. systemd
+
+Готовый файл: `deploy/dean.service`.
 
 `/etc/systemd/system/dean.service`:
 
@@ -71,6 +76,8 @@ journalctl -u dean -n 50 --no-pager
 ```
 
 ## 4. Reverse proxy
+
+Готовый файл: `deploy/Caddyfile`.
 
 Вариант с Caddy (TLS автоматически):
 
