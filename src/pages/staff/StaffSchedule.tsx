@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -149,6 +149,25 @@ function LessonEditor({
   const [note, setNote] = useState(lesson.note ?? '');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+
+  // Клавиатура: Escape закрывает, фокус входит в диалог и возвращается обратно.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    firstFieldRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      opener?.focus();
+    };
+  }, [onClose]);
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -183,7 +202,10 @@ function LessonEditor({
       aria-modal="true"
       aria-labelledby="lesson-editor-title"
     >
-      <div className="max-h-[90dvh] w-full overflow-y-auto rounded-t-[16px] bg-[var(--surface)] p-4 sm:max-w-md sm:rounded-[12px]">
+      <div
+        ref={panelRef}
+        className="max-h-[90dvh] w-full overflow-y-auto rounded-t-[16px] bg-[var(--surface)] p-4 sm:max-w-md sm:rounded-[12px]"
+      >
         <h2 id="lesson-editor-title" className="text-lg font-semibold">
           {lesson.course_title}
         </h2>
@@ -193,6 +215,7 @@ function LessonEditor({
           <div className="mb-3">
             <Label htmlFor="startsAt">Начало</Label>
             <Input
+              ref={firstFieldRef}
               id="startsAt"
               type="datetime-local"
               value={startsAt}

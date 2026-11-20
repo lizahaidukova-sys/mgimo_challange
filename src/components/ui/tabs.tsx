@@ -47,7 +47,8 @@ function useTabs() {
 export function TabsList({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      role="tablist"
+      role="group"
+      aria-label="Разделы"
       className={cn(
         'mb-3 inline-flex w-full gap-1 overflow-x-auto rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-1',
         className,
@@ -64,8 +65,7 @@ export function TabsTrigger({ value, children }: { value: string; children: Reac
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={selected}
+      aria-pressed={selected}
       onClick={() => setValue(value)}
       className={cn(
         'min-h-9 flex-1 whitespace-nowrap rounded-[6px] px-3 text-sm font-medium',
@@ -80,5 +80,5 @@ export function TabsTrigger({ value, children }: { value: string; children: Reac
 export function TabsContent({ value, children }: { value: string; children: React.ReactNode }) {
   const { value: active } = useTabs();
   if (active !== value) return null;
-  return <div role="tabpanel">{children}</div>;
+  return <div>{children}</div>;
 }
