@@ -124,6 +124,28 @@ dean.example.ru {
 | `robots.txt`, `noindex` | на месте |
 | Доступ с зарубежного IP (Финляндия) | 200 |
 
+## 4b. Эксплуатация до 28.11
+
+| Механизм | Как настроено |
+|---|---|
+| Автозапуск | `dean.service`, `caddy`, `dean-backup.timer` — `enabled` |
+| Перезапуск при падении | `Restart=on-failure`, `RestartSec=3` |
+| Перезагрузка сервера | проверено `systemctl reboot`: поднялось само за ~30 с, сессии и данные сохранились |
+| Бэкап базы | каждые 6 часов в `/opt/dean/backups`, хранится 14 копий, проверено чтением |
+| Срок сертификата | до 19.02.2027, продление автоматическое у Caddy |
+| Диск | 1.8 ГБ из 59 ГБ занято |
+| Логи | journald, 20 МБ; секретов и payload'ов в логах нет |
+
+Восстановление из бэкапа:
+
+```bash
+sudo systemctl stop dean
+cd /opt/dean/app
+gunzip -c /opt/dean/backups/app-<дата>.db.gz > data/app.db
+sudo chown dean:dean data/app.db
+sudo systemctl start dean
+```
+
 ## 5. Приёмка
 
 | Проверка | Как | Ожидание |
