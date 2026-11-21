@@ -170,7 +170,7 @@ export function grades(userId: number): GradeRow[] {
 }
 
 export function sessionState(userId: number): SessionState {
-  return computeSessionState(grades(userId));
+  return computeSessionState(grades(userId), currentSemesterEnd());
 }
 
 // ---------- заявки ----------
@@ -473,6 +473,14 @@ export function unreadCount(userId: number): number {
     .prepare(`SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read_at IS NULL`)
     .get(userId) as { c: number };
   return row.c;
+}
+
+// Конец сессии текущего семестра: нужен светофору для честного срока.
+function currentSemesterEnd(): string | null {
+  const row = db
+    .prepare(`SELECT session_ends_on FROM semesters WHERE is_current = 1 LIMIT 1`)
+    .get() as { session_ends_on: string } | undefined;
+  return row?.session_ends_on ?? null;
 }
 
 // ---------- зачётка по семестрам ----------
@@ -833,7 +841,7 @@ export function dashboard(user: SessionUser): DashboardData {
     .sort((a, b) => (a.at < b.at ? 1 : -1))
     .slice(0, 4);
 
-  const state = computeSessionState(grades(user.id));
+  const state = computeSessionState(grades(user.id), currentSemesterEnd());
   const active = listRequests(user.id).filter(
     (request) => request.status === 'submitted' || request.status === 'in_progress',
   );

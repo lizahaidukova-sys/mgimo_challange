@@ -6,7 +6,15 @@ import type { GradeRow, SessionState } from '../shared/types';
 const RED_DEBTS = 3;
 const YELLOW_DEBTS = 1;
 
-export function computeSessionState(rows: GradeRow[]): SessionState {
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+}
+
+export function computeSessionState(
+  rows: GradeRow[],
+  sessionEndsOn: string | null = null,
+): SessionState {
   const debts = rows.filter((row) => row.status === 'debt' || row.status === 'failed');
   const graded = rows.filter((row) => row.grade !== null && row.grade !== undefined);
   const gpa =
@@ -32,13 +40,16 @@ export function computeSessionState(rows: GradeRow[]): SessionState {
     courseId: row.courseId,
     title: row.title,
     deadline: row.debtDeadline,
+    daysLeft: daysUntil(row.debtDeadline),
     why:
       row.status === 'failed'
-        ? 'Оценка неудовлетворительная, нужна пересдача'
+        ? 'Неудовлетворительно, нужна пересдача'
         : row.controlForm === 'exam'
-          ? 'Экзамен не сдан, есть долг'
-          : 'Зачёт не получен, есть долг',
+          ? 'Экзамен не сдан'
+          : 'Зачёт не получен',
   }));
+
+  const daysToSession = daysUntil(sessionEndsOn);
 
   let severity: SessionState['severity'] = 'green';
   if (debts.length >= RED_DEBTS || overdue.length > 0) severity = 'red';
@@ -49,7 +60,9 @@ export function computeSessionState(rows: GradeRow[]): SessionState {
       ? 'Сессия без риска'
       : severity === 'yellow'
         ? 'Есть что закрыть'
-        : 'Нужно действовать';
+        : overdue.length > 0
+          ? 'Есть просроченные долги'
+          : 'Три долга и больше';
 
   return {
     severity,
@@ -57,9 +70,10 @@ export function computeSessionState(rows: GradeRow[]): SessionState {
     overdue: overdue.length,
     gpa,
     headline,
-    explanation: buildExplanation(severity, debts.length, overdue.length, ordered),
+    explanation: buildExplanation(severity, debts.length, overdue.length, ordered, daysToSession),
     actions,
     generatedBy: 'rules',
+    daysToSession,
   };
 }
 
@@ -68,18 +82,64 @@ function buildExplanation(
   debts: number,
   overdue: number,
   ordered: GradeRow[],
+  daysToSession: number | null,
 ): string {
   if (severity === 'green') {
-    return 'Долгов нет, все зачёты закрыты. Можно заниматься текущими дисциплинами.';
+    return 'Все дисциплины семестра закрыты. Долгов нет.';
   }
+
   const first = ordered[0];
-  const firstLine = first
-    ? `Первым делом — «${first.title}»${first.debtDeadline ? ` (срок ${formatDate(first.debtDeadline)})` : ''}.`
-    : '';
-  if (severity === 'red') {
-    return `${debts} ${plural(debts, 'долг', 'долга', 'долгов')}, из них ${overdue} ${plural(overdue, 'просрочен', 'просрочено', 'просрочено')}. ${firstLine} Риск не закрыть сессию в срок.`;
+  const second = ordered[1];
+  const firstDays = first ? daysUntil(first.debtDeadline) : null;
+
+  // Собираем предложения по одному: склейка через шаблоны давала «дня..» и
+  // заглавную букву после кавычки.
+  const sentences: string[] = [];
+
+  // Про просрочку говорим отдельным предложением, только если долгов больше
+  // одного: для единственного долга срок назовёт следующая фраза.
+  if (overdue > 0 && debts > 1) {
+    sentences.push(
+      overdue === debts
+        ? debts === 2
+          ? 'Оба просрочены.'
+          : 'Все просрочены.'
+        : `Просрочено ${overdue} из ${debts}.`,
+    );
+  } else if (debts > 2) {
+    // Для одного-двух долгов счёт уже виден в заголовке — не повторяем.
+    sentences.push(`Всего ${debts} ${plural(debts, 'долг', 'долга', 'долгов')}.`);
   }
-  return `${debts} ${plural(debts, 'долг', 'долга', 'долгов')}. ${firstLine} Скорее всего, сессия закроется, если начать сейчас.`;
+
+  if (first) {
+    if (firstDays === null) {
+      sentences.push(`Ближайший — «${first.title}».`);
+    } else if (firstDays < 0) {
+      sentences.push(
+        `Ближайший — «${first.title}», срок прошёл ${Math.abs(firstDays)} ${plural(Math.abs(firstDays), 'день', 'дня', 'дней')} назад.`,
+      );
+    } else if (firstDays === 0) {
+      sentences.push(`Ближайший — «${first.title}», срок сегодня.`);
+    } else {
+      sentences.push(
+        `Ближайший — «${first.title}», срок через ${firstDays} ${plural(firstDays, 'день', 'дня', 'дней')}.`,
+      );
+    }
+  }
+
+  if (second) {
+    sentences.push(`Следующий — «${second.title}».`);
+  }
+
+  if (daysToSession !== null) {
+    sentences.push(
+      daysToSession <= 0
+        ? 'Сессия закончилась.'
+        : `До конца сессии ${daysToSession} ${plural(daysToSession, 'день', 'дня', 'дней')}.`,
+    );
+  }
+
+  return sentences.join(' ');
 }
 
 function plural(n: number, one: string, few: string, many: string): string {
@@ -88,14 +148,6 @@ function plural(n: number, one: string, few: string, many: string): string {
   if (mod10 === 1 && mod100 !== 11) return one;
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
   return many;
-}
-
-function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'Europe/Moscow',
-  }).format(new Date(iso));
 }
 
 const LLM_TIMEOUT_MS = 3000;

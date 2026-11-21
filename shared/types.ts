@@ -157,8 +157,10 @@ export interface SessionState {
   gpa: number | null;
   headline: string;
   explanation: string;
-  actions: { courseId: number; title: string; deadline: string | null; why: string }[];
+  actions: { courseId: number; title: string; deadline: string | null; why: string; daysLeft: number | null }[];
   generatedBy: 'rules' | 'llm';
+  /** Дней до конца сессии: нужен для честной формулировки срока. */
+  daysToSession: number | null;
 }
 
 export interface RequestEvent {

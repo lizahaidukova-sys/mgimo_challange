@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, CircleDot } from 'lucide-react';
 import type { SessionState } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { cn, formatDate } from '@/lib/utils';
+import { cn, formatDate, plural } from '@/lib/utils';
 
 export function statusVariant(status: string): 'neutral' | 'accent' | 'success' | 'warning' | 'error' {
   switch (status) {
@@ -81,7 +81,23 @@ export function SessionLight({ state, compact = false }: { state: SessionState; 
                     <p className="text-sm font-medium">
                       {index + 1}. {action.title}
                     </p>
-                    {action.deadline ? (
+                    {action.daysLeft !== null ? (
+                      <span
+                        className={
+                          action.daysLeft < 0
+                            ? 'shrink-0 text-xs font-medium text-[var(--error)]'
+                            : action.daysLeft <= 2
+                              ? 'shrink-0 text-xs font-medium text-[var(--warning)]'
+                              : 'shrink-0 text-xs text-[var(--muted)]'
+                        }
+                      >
+                        {action.daysLeft < 0
+                          ? `просрочен на ${Math.abs(action.daysLeft)} ${plural(Math.abs(action.daysLeft), 'день', 'дня', 'дней')}`
+                          : action.daysLeft === 0
+                            ? 'срок сегодня'
+                            : `осталось ${action.daysLeft} ${plural(action.daysLeft, 'день', 'дня', 'дней')}`}
+                      </span>
+                    ) : action.deadline ? (
                       <span className="shrink-0 text-xs text-[var(--muted)]">
                         до {formatDate(action.deadline)}
                       </span>
