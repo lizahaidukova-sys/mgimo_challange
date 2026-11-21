@@ -51,7 +51,7 @@ export default function StaffRequestsPage() {
             }}
             aria-pressed={status === filter.value}
             className={cn(
-              'min-h-9 shrink-0 rounded-full border px-3 text-sm font-medium',
+              'min-h-11 shrink-0 rounded-full border px-3 text-sm font-medium sm:min-h-9',
               status === filter.value
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
                 : 'border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]',

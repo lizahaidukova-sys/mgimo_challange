@@ -81,7 +81,7 @@ export default function SchedulePage() {
             onClick={() => setView('day')}
             aria-pressed={view === 'day'}
             className={cn(
-              'min-h-9 rounded-[6px] px-3 text-sm font-medium',
+              'min-h-11 rounded-[6px] px-3 text-sm font-medium sm:min-h-9',
               view === 'day' ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--muted)]',
             )}
           >
@@ -92,7 +92,7 @@ export default function SchedulePage() {
             onClick={() => setView('week')}
             aria-pressed={view === 'week'}
             className={cn(
-              'min-h-9 rounded-[6px] px-3 text-sm font-medium',
+              'min-h-11 rounded-[6px] px-3 text-sm font-medium sm:min-h-9',
               view === 'week' ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--muted)]',
             )}
           >

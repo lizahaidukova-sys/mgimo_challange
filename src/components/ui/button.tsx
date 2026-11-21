@@ -16,7 +16,7 @@ const buttonVariants = cva(
       size: {
         // 44px по умолчанию — под палец; sm — только для десктопных мест.
         default: 'h-11 px-4',
-        sm: 'h-9 px-3',
+        sm: 'h-11 px-3 sm:h-9',
         icon: 'h-11 w-11',
       },
     },

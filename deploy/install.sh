@@ -39,7 +39,9 @@ fi
 
 echo "== 4/7 зависимости и сборка =="
 cd "$APP_DIR"
-sudo -u "$APP_USER" npm ci
+# npm ci не подходит: package-lock собран на Windows и не содержит
+# платформенных optional-зависимостей (Tailwind oxide WASM для Linux).
+sudo -u "$APP_USER" npm install --no-audit --no-fund
 sudo -u "$APP_USER" npm run build
 
 echo "== 5/7 конфигурация =="

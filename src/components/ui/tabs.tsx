@@ -68,7 +68,7 @@ export function TabsTrigger({ value, children }: { value: string; children: Reac
       aria-pressed={selected}
       onClick={() => setValue(value)}
       className={cn(
-        'min-h-9 flex-1 whitespace-nowrap rounded-[6px] px-3 text-sm font-medium',
+        'min-h-11 flex-1 whitespace-nowrap rounded-[6px] px-3 text-sm font-medium sm:min-h-9',
         selected ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--muted)]',
       )}
     >
