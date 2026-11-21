@@ -19,6 +19,18 @@ import {
   type AuthedRequest,
 } from './auth';
 import {
+  bookRetake,
+  cancelRetake,
+  deanDialogs,
+  documents,
+  markDialogRead,
+  messages,
+  payments,
+  retakeSlots,
+  search,
+  semesterResults,
+  sendMessage,
+  semesters,
   createRequest,
   dashboard,
   getRequest,
@@ -316,6 +328,85 @@ app.post('/api/staff/lessons/:id', requireStaff, (req: AuthedRequest, res) => {
     return;
   }
   res.json(updated);
+});
+
+// ---------- новые разделы ----------
+
+app.get('/api/grades/history', requireAuth, (req: AuthedRequest, res) => {
+  res.json({ semesters: semesterResults(req.user!.id), current: semesters() });
+});
+
+app.get('/api/retakes', requireAuth, (req: AuthedRequest, res) => {
+  res.json({ rows: retakeSlots(req.user!.id) });
+});
+
+app.post('/api/retakes/:id/book', requireAuth, (req: AuthedRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(404).json({ error: 'Не найдено' });
+    return;
+  }
+  const result = bookRetake(req.user!.id, id);
+  if (!result.ok) {
+    res.status(400).json({ error: result.reason });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/retakes/:id/cancel', requireAuth, (req: AuthedRequest, res) => {
+  const id = Number(req.params.id);
+  const ok = Number.isInteger(id) && cancelRetake(req.user!.id, id);
+  if (!ok) {
+    res.status(404).json({ error: 'Запись не найдена' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+app.get('/api/documents', requireAuth, (req: AuthedRequest, res) => {
+  res.json({ documents: documents(req.user!.id), payments: payments(req.user!.id) });
+});
+
+app.get('/api/messages', requireAuth, (req: AuthedRequest, res) => {
+  res.json({ rows: messages(req.user!.id) });
+});
+
+const messageSchema = z.object({ body: z.string().min(2).max(2000) });
+
+app.post('/api/messages', requireAuth, (req: AuthedRequest, res) => {
+  const parsed = messageSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Сообщение слишком короткое' });
+    return;
+  }
+  const created = sendMessage(req.user!.id, req.user!.id, parsed.data.body.trim());
+  res.status(201).json(created);
+});
+
+app.get('/api/staff/dialogs', requireStaff, (_req: AuthedRequest, res) => {
+  res.json({ rows: deanDialogs() });
+});
+
+app.post('/api/staff/dialogs/:userId/reply', requireStaff, (req: AuthedRequest, res) => {
+  const userId = Number(req.params.userId);
+  const parsed = messageSchema.safeParse(req.body);
+  if (!Number.isInteger(userId) || !parsed.success) {
+    res.status(400).json({ error: 'Проверьте сообщение' });
+    return;
+  }
+  sendMessage(userId, req.user!.id, parsed.data.body.trim());
+  res.status(201).json({ ok: true });
+});
+
+app.post('/api/staff/dialogs/:userId/read', requireStaff, (req: AuthedRequest, res) => {
+  const userId = Number(req.params.userId);
+  res.json({ marked: Number.isInteger(userId) ? markDialogRead(userId) : 0 });
+});
+
+app.get('/api/search', requireAuth, (req: AuthedRequest, res) => {
+  const query = typeof req.query.q === 'string' ? req.query.q : '';
+  res.json({ hits: search(req.user!, query) });
 });
 
 app.get('/api/health', (_req, res) => {

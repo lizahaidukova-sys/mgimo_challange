@@ -11,6 +11,8 @@ function row(partial: Partial<GradeRow>): GradeRow {
     title: partial.title ?? 'Без названия',
     teacherName: 'Преподаватель',
     credits: 3,
+    hours: 108,
+    semesterId: 1,
     controlForm: 'exam',
     grade: null,
     gradeLabel: '',

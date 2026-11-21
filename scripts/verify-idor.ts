@@ -120,11 +120,26 @@ async function main(): Promise<void> {
     const cookieB = await login('student2@demo.local');
     const cookieStaff = await login('staff@demo.local');
 
-    // Заявка 3 принадлежит студенту 2.
-    check('студент Б видит свою заявку', (await status('/api/requests/3', cookieB)) === 200, 'ожидали 200');
+    // Идентификаторы берём из данных: сид может меняться, тест — нет.
+    async function requestIds(cookie: string): Promise<number[]> {
+      const response = await fetch(`${BASE}/api/requests`, { headers: { cookie } });
+      const data = (await response.json()) as { rows: { id: number }[] };
+      return data.rows.map((row) => row.id);
+    }
+    const idsA = await requestIds(cookieA);
+    const idsB = await requestIds(cookieB);
+    check('студент А видит свои заявки', idsA.length > 0, `заявок: ${idsA.length}`);
+    const foreignForA = idsB[0];
+    const ownForB = idsB[0];
+    if (!foreignForA) throw new Error('у студента Б нет заявок для проверки');
+    check(
+      'студент Б видит свою заявку',
+      (await status(`/api/requests/${ownForB}`, cookieB)) === 200,
+      'ожидали 200',
+    );
     check(
       'студент А не видит чужую заявку',
-      (await status('/api/requests/3', cookieA)) === 404,
+      (await status(`/api/requests/${foreignForA}`, cookieA)) === 404,
       'ожидали 404 (не 403, чтобы не раскрывать существование)',
     );
     check(
@@ -172,7 +187,7 @@ async function main(): Promise<void> {
     }
 
     // Смена статуса: студент не должен иметь такой возможности.
-    const statusChange = await fetch(`${BASE}/api/staff/requests/3/status`, {
+    const statusChange = await fetch(`${BASE}/api/staff/requests/${ownForB}/status`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: cookieA },
       body: JSON.stringify({ status: 'ready', comment: 'подмена' }),
@@ -200,7 +215,7 @@ async function main(): Promise<void> {
     );
 
     // Отказ без причины отклоняется.
-    const rejection = await fetch(`${BASE}/api/staff/requests/3/status`, {
+    const rejection = await fetch(`${BASE}/api/staff/requests/${ownForB}/status`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: cookieStaff },
       body: JSON.stringify({ status: 'rejected', comment: '   ' }),
@@ -223,8 +238,47 @@ async function main(): Promise<void> {
     }
     check('перебор по неизвестному адресу упирается в лимит', limited === 429, `11-я попытка: ${limited}`);
 
+    // Новые разделы: пересдачи, документы, сообщения — тоже только свои.
+    const studentADocs = await fetch(`${BASE}/api/documents`, { headers: { cookie: cookieA } });
+    const studentBDocs = await fetch(`${BASE}/api/documents`, { headers: { cookie: cookieB } });
+    const aDoc = (await studentADocs.json()) as { documents: { number: string }[] };
+    const bDoc = (await studentBDocs.json()) as { documents: { number: string }[] };
+    check(
+      'документы у студентов разные',
+      aDoc.documents.length > 0 &&
+        bDoc.documents.length > 0 &&
+        !aDoc.documents.some((doc) => bDoc.documents.some((other) => other.number === doc.number)),
+      `номера: ${aDoc.documents.map((d) => d.number).join(',')} / ${bDoc.documents.map((d) => d.number).join(',')}`,
+    );
+
+    const aMessages = await fetch(`${BASE}/api/messages`, { headers: { cookie: cookieA } });
+    const aMessageRows = (await aMessages.json()) as { rows: { body: string }[] };
+    check(
+      'студент не видит переписку другого студента',
+      !aMessageRows.rows.some((row) => row.body.includes('перенести пересдачу по торговле')),
+      `сообщений: ${aMessageRows.rows.length}`,
+    );
+
+    const staffDialogs = await fetch(`${BASE}/api/staff/dialogs`, { headers: { cookie: cookieA } });
+    check(
+      'студент не может читать все диалоги деканата',
+      staffDialogs.status === 403,
+      `получили ${staffDialogs.status}`,
+    );
+
+    const replyAsStudent = await fetch(`${BASE}/api/staff/dialogs/2/reply`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: cookieA },
+      body: JSON.stringify({ body: 'подмена' }),
+    });
+    check(
+      'студент не может ответить от имени деканата',
+      replyAsStudent.status === 403,
+      `получили ${replyAsStudent.status}`,
+    );
+
     // Ответ на чужой запрос не должен раскрывать существование ресурса.
-    const foreign = await fetch(`${BASE}/api/requests/3`, { headers: { cookie: cookieA } });
+    const foreign = await fetch(`${BASE}/api/requests/${foreignForA}`, { headers: { cookie: cookieA } });
     const foreignBody = (await foreign.text()).trim();
     const missing = await fetch(`${BASE}/api/requests/999999`, { headers: { cookie: cookieA } });
     const missingBody = (await missing.text()).trim();

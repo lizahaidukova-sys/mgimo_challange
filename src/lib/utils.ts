@@ -55,7 +55,15 @@ export function isoDay(date: Date): string {
 export function relative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.round(diff / 60000);
-  if (Math.abs(minutes) < 1) return 'только что';
+  if (minutes < 0) {
+    // Событие в будущем: срок заявки, ближайшая пересдача.
+    const ahead = Math.abs(minutes);
+    if (ahead < 60) return `через ${ahead} мин`;
+    const aheadHours = Math.round(ahead / 60);
+    if (aheadHours < 24) return `через ${aheadHours} ч`;
+    return `через ${Math.round(aheadHours / 24)} дн`;
+  }
+  if (minutes < 1) return 'только что';
   if (minutes < 60) return `${minutes} мин назад`;
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} ч назад`;

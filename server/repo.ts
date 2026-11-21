@@ -18,6 +18,18 @@ import {
   GRADE_LABEL,
 } from '../shared/types';
 import { computeSessionState } from './rules';
+import {
+  DOCUMENT_KIND_LABEL,
+  PAYMENT_KIND_LABEL,
+  type Semester,
+  type SemesterResult,
+  type RetakeSlot,
+  type DocumentRow,
+  type PaymentRow,
+  type MessageRow,
+  type DeanMessage,
+  type SearchHit,
+} from '../shared/types';
 import { startOfMskDay, startOfMskWeek, addDays, mskWeekday } from './time';
 
 // ---------- расписание ----------
@@ -128,7 +140,8 @@ export function grades(userId: number): GradeRow[] {
     .prepare(
       `SELECT e.id AS enrollment_id, c.id AS course_id, c.title, t.full_name AS teacher_name,
               c.credits, c.control_form, e.grade, e.status, e.retake_count,
-              e.debt_since, e.debt_deadline, e.updated_at
+              e.debt_since, e.debt_deadline, e.updated_at,
+              COALESCE(c.hours, 0) AS hours, e.semester_id
        FROM enrollments e
        JOIN courses c ON c.id = e.course_id
        JOIN teachers t ON t.id = c.teacher_id
@@ -151,6 +164,8 @@ export function grades(userId: number): GradeRow[] {
     debtSince: (row.debt_since as string | null) ?? null,
     debtDeadline: (row.debt_deadline as string | null) ?? null,
     updatedAt: row.updated_at as string,
+    hours: (row.hours as number) ?? 0,
+    semesterId: (row.semester_id as number | null) ?? null,
   }));
 }
 
@@ -460,6 +475,298 @@ export function unreadCount(userId: number): number {
   return row.c;
 }
 
+// ---------- зачётка по семестрам ----------
+
+export function semesters(): Semester[] {
+  const rows = db
+    .prepare(`SELECT id, title, number, starts_on, ends_on, session_ends_on, is_current
+              FROM semesters ORDER BY number ASC`)
+    .all() as Record<string, unknown>[];
+  return rows.map((row) => ({
+    id: row.id as number,
+    title: row.title as string,
+    number: row.number as number,
+    startsOn: row.starts_on as string,
+    endsOn: row.ends_on as string,
+    sessionEndsOn: row.session_ends_on as string,
+    isCurrent: Boolean(row.is_current),
+  }));
+}
+
+// История успеваемости: по семестрам, с GPA и зачётами.
+export function semesterResults(userId: number): SemesterResult[] {
+  const all = grades(userId);
+  return semesters()
+    .map((semester) => {
+      const rows = all.filter((row) => row.semesterId === semester.id);
+      const graded = rows.filter((row) => row.grade !== null);
+      const gpa =
+        graded.length > 0
+          ? Math.round(
+              (graded.reduce((sum, row) => sum + (row.grade as number), 0) / graded.length) * 100,
+            ) / 100
+          : null;
+      return {
+        semester,
+        rows,
+        gpa,
+        passed: rows.filter((row) => row.status === 'passed').length,
+        total: rows.length,
+        credits: rows
+          .filter((row) => row.status === 'passed')
+          .reduce((sum, row) => sum + row.credits, 0),
+      };
+    })
+    .filter((result) => result.rows.length > 0);
+}
+
+// ---------- пересдачи ----------
+
+export function retakeSlots(userId: number): RetakeSlot[] {
+  const rows = db
+    .prepare(
+      `SELECT s.id, s.course_id, c.title AS course_title, t.full_name AS teacher_name,
+              r.name AS room_name, s.starts_at, s.duration_min, s.capacity, s.comment,
+              (SELECT COUNT(*) FROM retake_bookings b WHERE b.slot_id = s.id) AS booked,
+              (SELECT b.id FROM retake_bookings b WHERE b.slot_id = s.id AND b.user_id = ?) AS my_booking_id
+       FROM retake_slots s
+       JOIN courses c ON c.id = s.course_id
+       JOIN teachers t ON t.id = c.teacher_id
+       JOIN rooms r ON r.id = s.room_id
+       WHERE s.starts_at >= ?
+       ORDER BY s.starts_at ASC`,
+    )
+    .all(userId, addDays(new Date(), -1).toISOString()) as Record<string, unknown>[];
+
+  return rows.map((row) => ({
+    id: row.id as number,
+    courseId: row.course_id as number,
+    courseTitle: row.course_title as string,
+    teacherName: row.teacher_name as string,
+    roomName: row.room_name as string,
+    startsAt: row.starts_at as string,
+    durationMin: row.duration_min as number,
+    capacity: row.capacity as number,
+    booked: row.booked as number,
+    myBookingId: (row.my_booking_id as number | null) ?? null,
+    comment: (row.comment as string | null) ?? null,
+  }));
+}
+
+export function bookRetake(
+  userId: number,
+  slotId: number,
+): { ok: true } | { ok: false; reason: string } {
+  const slot = db
+    .prepare(
+      `SELECT s.id, s.capacity, s.starts_at,
+              (SELECT COUNT(*) FROM retake_bookings b WHERE b.slot_id = s.id) AS booked
+       FROM retake_slots s WHERE s.id = ?`,
+    )
+    .get(slotId) as { id: number; capacity: number; starts_at: string; booked: number } | undefined;
+
+  if (!slot) return { ok: false, reason: 'Слот не найден' };
+  if (new Date(slot.starts_at).getTime() < Date.now()) {
+    return { ok: false, reason: 'Пересдача уже прошла' };
+  }
+  const existing = db
+    .prepare(`SELECT id FROM retake_bookings WHERE slot_id = ? AND user_id = ?`)
+    .get(slotId, userId);
+  if (existing) return { ok: false, reason: 'Вы уже записаны на этот слот' };
+  if (Number(slot.booked) >= slot.capacity) return { ok: false, reason: 'Мест не осталось' };
+
+  db.prepare(
+    `INSERT INTO retake_bookings (slot_id, user_id, created_at) VALUES (?, ?, ?)`,
+  ).run(slotId, userId, new Date().toISOString());
+  audit(userId, 'retake.book', 'retake_slot', slotId, {});
+  return { ok: true };
+}
+
+export function cancelRetake(userId: number, slotId: number): boolean {
+  const info = db
+    .prepare(`DELETE FROM retake_bookings WHERE slot_id = ? AND user_id = ?`)
+    .run(slotId, userId);
+  return Number(info.changes) > 0;
+}
+
+// ---------- документы и стипендия ----------
+
+export function documents(userId: number): DocumentRow[] {
+  const rows = db
+    .prepare(
+      `SELECT id, kind, number, issued_at, valid_until, issued_by, request_id
+       FROM documents WHERE user_id = ? ORDER BY issued_at DESC`,
+    )
+    .all(userId) as Record<string, unknown>[];
+  return rows.map((row) => ({
+    id: row.id as number,
+    kind: row.kind as string,
+    kindLabel: DOCUMENT_KIND_LABEL[row.kind as string] ?? (row.kind as string),
+    number: row.number as string,
+    issuedAt: row.issued_at as string,
+    validUntil: (row.valid_until as string | null) ?? null,
+    issuedBy: row.issued_by as string,
+    requestId: (row.request_id as number | null) ?? null,
+  }));
+}
+
+export function payments(userId: number): PaymentRow[] {
+  const rows = db
+    .prepare(
+      `SELECT id, kind, amount, period, paid_at, status FROM payments
+       WHERE user_id = ? ORDER BY id DESC`,
+    )
+    .all(userId) as Record<string, unknown>[];
+  return rows.map((row) => ({
+    id: row.id as number,
+    kind: row.kind as string,
+    kindLabel: PAYMENT_KIND_LABEL[row.kind as string] ?? (row.kind as string),
+    amount: row.amount as number,
+    period: row.period as string,
+    paidAt: (row.paid_at as string | null) ?? null,
+    status: row.status as 'paid' | 'pending',
+  }));
+}
+
+// ---------- переписка с деканатом ----------
+
+export function messages(userId: number): MessageRow[] {
+  const rows = db
+    .prepare(
+      `SELECT m.id, m.body, m.read_at, m.created_at, u.full_name AS author_name, u.role AS author_role
+       FROM messages m JOIN users u ON u.id = m.author_id
+       WHERE m.user_id = ? ORDER BY m.created_at ASC`,
+    )
+    .all(userId) as Record<string, unknown>[];
+  return rows.map((row) => ({
+    id: row.id as number,
+    body: row.body as string,
+    authorName: row.author_name as string,
+    mine: row.author_role === 'student',
+    readAt: (row.read_at as string | null) ?? null,
+    createdAt: row.created_at as string,
+  }));
+}
+
+export function sendMessage(userId: number, authorId: number, body: string): MessageRow {
+  const now = new Date().toISOString();
+  const info = db
+    .prepare(
+      `INSERT INTO messages (user_id, author_id, body, read_at, created_at) VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(userId, authorId, body, authorId === userId ? now : null, now);
+  audit(authorId, 'message.send', 'message', Number(info.lastInsertRowid), {});
+  return {
+    id: Number(info.lastInsertRowid),
+    body,
+    authorName: '',
+    mine: authorId === userId,
+    readAt: null,
+    createdAt: now,
+  };
+}
+
+export function deanDialogs(): DeanMessage[] {
+  const rows = db
+    .prepare(
+      `SELECT m.id, m.user_id, m.body, m.created_at, m.read_at, u.full_name AS student_name, u.group_name,
+              a.role AS author_role
+       FROM messages m
+       JOIN users u ON u.id = m.user_id
+       JOIN users a ON a.id = m.author_id
+       ORDER BY m.created_at ASC`,
+    )
+    .all() as Record<string, unknown>[];
+  return rows.map((row) => ({
+    id: row.id as number,
+    userId: row.user_id as number,
+    studentName: row.student_name as string,
+    studentGroup: row.group_name as string,
+    body: row.body as string,
+    mine: row.author_role === 'staff',
+    createdAt: row.created_at as string,
+    readAt: (row.read_at as string | null) ?? null,
+  }));
+}
+
+export function markDialogRead(userId: number): number {
+  return Number(
+    db
+      .prepare(
+        `UPDATE messages SET read_at = ? WHERE user_id = ? AND read_at IS NULL AND author_id != ?`,
+      )
+      .run(new Date().toISOString(), userId, userId).changes,
+  );
+}
+
+// ---------- поиск по кабинету ----------
+
+export function search(user: SessionUser, query: string): SearchHit[] {
+  const needle = query.trim().toLowerCase();
+  if (needle.length < 2) return [];
+  const hits: SearchHit[] = [];
+
+  for (const row of grades(user.id)) {
+    if (!row.title.toLowerCase().includes(needle)) continue;
+    hits.push({
+      kind: 'grade',
+      title: row.title,
+      detail:
+        row.grade !== null
+          ? `Оценка: ${row.grade} (${row.gradeLabel})`
+          : row.status === 'debt' || row.status === 'failed'
+            ? 'Есть долг'
+            : 'Ещё не закрыта',
+      href: '/grades',
+    });
+  }
+
+  const lessons = db
+    .prepare(
+      `SELECT l.starts_at, c.title FROM lessons l JOIN courses c ON c.id = l.course_id
+       WHERE l.group_name = ? AND l.starts_at >= ? AND lower(c.title) LIKE ?
+       ORDER BY l.starts_at ASC LIMIT 5`,
+    )
+    .all(user.groupName, new Date().toISOString(), `%${needle}%`) as {
+    starts_at: string;
+    title: string;
+  }[];
+  for (const lesson of lessons) {
+    hits.push({
+      kind: 'lesson',
+      title: lesson.title,
+      detail: new Intl.DateTimeFormat('ru-RU', {
+        dateStyle: 'long',
+        timeStyle: 'short',
+        timeZone: 'Europe/Moscow',
+      }).format(new Date(lesson.starts_at)),
+      href: '/schedule',
+    });
+  }
+
+  for (const request of listRequests(user.id)) {
+    if (!request.typeLabel.toLowerCase().includes(needle)) continue;
+    hits.push({
+      kind: 'request',
+      title: `${request.typeLabel} №${request.id}`,
+      detail: request.statusLabel,
+      href: `/requests/${request.id}`,
+    });
+  }
+
+  for (const document of documents(user.id)) {
+    if (!document.kindLabel.toLowerCase().includes(needle)) continue;
+    hits.push({
+      kind: 'document',
+      title: document.kindLabel,
+      detail: `№${document.number}`,
+      href: '/documents',
+    });
+  }
+
+  return hits.slice(0, 12);
+}
+
 // ---------- главная ----------
 
 export function dashboard(user: SessionUser): DashboardData {
@@ -533,6 +840,75 @@ export function dashboard(user: SessionUser): DashboardData {
 
   const upcoming = nextLesson(user.groupName, now.toISOString());
 
+  // Дедлайны на ближайшие дни: долги, заявки, пересдачи.
+  const todayDeadlines: DashboardData['todayDeadlines'] = [];
+  for (const action of state.actions) {
+    if (!action.deadline) continue;
+    const days = Math.ceil((new Date(action.deadline).getTime() - now.getTime()) / 86_400_000);
+    if (days > 7) continue;
+    todayDeadlines.push({
+      title: action.title,
+      detail: days < 0 ? 'срок прошёл' : days === 0 ? 'сегодня' : `через ${days} дн.`,
+      at: action.deadline,
+      urgent: days <= 2,
+    });
+  }
+  for (const request of active) {
+    const days = Math.ceil((new Date(request.dueAt).getTime() - now.getTime()) / 86_400_000);
+    if (days > 7) continue;
+    todayDeadlines.push({
+      title: `Заявка №${request.id}`,
+      detail: days < 0 ? 'срок прошёл' : days === 0 ? 'сегодня' : `через ${days} дн.`,
+      at: request.dueAt,
+      urgent: request.overdue,
+    });
+  }
+  todayDeadlines.sort((a, b) => (a.at < b.at ? -1 : 1));
+
+  const currentSemester = semesters().find((semester) => semester.isCurrent) ?? null;
+  const daysToSession = currentSemester
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(currentSemester.sessionEndsOn).getTime() - now.getTime()) / 86_400_000,
+        ),
+      )
+    : 0;
+
+  const currentRows = grades(user.id).filter(
+    (row) => currentSemester === null || row.semesterId === currentSemester.id,
+  );
+  const progress = {
+    passed: currentRows.filter((row) => row.status === 'passed').length,
+    total: currentRows.length,
+    credits: currentRows
+      .filter((row) => row.status === 'passed')
+      .reduce((sum, row) => sum + row.credits, 0),
+    plannedCredits: currentRows.reduce((sum, row) => sum + row.credits, 0),
+  };
+
+  const unreadMessages = Number(
+    (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND read_at IS NULL AND author_id != ?`,
+        )
+        .get(user.id, user.id) as { c: number }
+    ).c,
+  );
+
+  const retakeSoon =
+    retakeSlots(user.id).find((slot) => slot.myBookingId !== null) ?? null;
+  const scholarshipRows = payments(user.id);
+  const latestPayment = scholarshipRows[0];
+  const scholarship = latestPayment
+    ? {
+        period: latestPayment.period,
+        amount: latestPayment.amount,
+        paid: latestPayment.status === 'paid',
+      }
+    : null;
+
   return {
     user,
     todayLessons,
@@ -541,6 +917,13 @@ export function dashboard(user: SessionUser): DashboardData {
     activeRequests: active,
     unreadNotifications: unreadCount(user.id),
     nextDeadline: upcoming ? { title: upcoming.courseTitle, at: upcoming.startsAt } : null,
+    nextLesson: upcoming,
+    daysToSession,
+    progress,
+    todayDeadlines,
+    unreadMessages,
+    retakeSoon,
+    scholarship,
   };
 }
 

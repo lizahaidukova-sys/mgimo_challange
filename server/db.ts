@@ -28,6 +28,14 @@ export function transaction<T>(fn: () => T): T {
   }
 }
 
+// Колонки добавляются в уже существующие базы: пересоздавать её на сервере нельзя.
+function addColumnIfMissing(table: string, column: string, ddl: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((entry) => entry.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  }
+}
+
 export function migrate(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -159,7 +167,75 @@ export function migrate(): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor_id);
+
+    CREATE TABLE IF NOT EXISTS semesters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      number INTEGER NOT NULL,
+      starts_on TEXT NOT NULL,
+      ends_on TEXT NOT NULL,
+      session_ends_on TEXT NOT NULL,
+      is_current INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS retake_slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      course_id INTEGER NOT NULL REFERENCES courses(id),
+      room_id INTEGER NOT NULL REFERENCES rooms(id),
+      starts_at TEXT NOT NULL,
+      duration_min INTEGER NOT NULL DEFAULT 90,
+      capacity INTEGER NOT NULL DEFAULT 8,
+      comment TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_retake_slots_date ON retake_slots(starts_at);
+
+    CREATE TABLE IF NOT EXISTS retake_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slot_id INTEGER NOT NULL REFERENCES retake_slots(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      UNIQUE (slot_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      request_id INTEGER REFERENCES requests(id),
+      kind TEXT NOT NULL,
+      number TEXT NOT NULL,
+      issued_at TEXT NOT NULL,
+      valid_until TEXT,
+      issued_by TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user_id);
+
+    CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      period TEXT NOT NULL,
+      paid_at TEXT,
+      status TEXT NOT NULL DEFAULT 'paid'
+    );
+    CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      body TEXT NOT NULL,
+      read_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, created_at);
   `);
+
+  // Колонки, добавленные позже: нужны для зачётки и объявлений по группам.
+  addColumnIfMissing('courses', 'hours', 'INTEGER');
+  addColumnIfMissing('enrollments', 'semester_id', 'INTEGER');
+  addColumnIfMissing('enrollments', 'hours', 'INTEGER');
+  addColumnIfMissing('requests', 'priority', "TEXT NOT NULL DEFAULT 'normal'");
 }
 
 migrate();

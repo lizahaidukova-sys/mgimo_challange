@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Bell,
+  BookOpen,
   CalendarDays,
   FileText,
   GraduationCap,
@@ -8,12 +9,16 @@ import {
   Inbox,
   LogOut,
   Megaphone,
+  MessageSquare,
   CalendarClock,
   UserRound,
+  Wallet,
 } from 'lucide-react';
+import { SearchBox } from '@/components/SearchBox';
 import { useAuth } from '@/App';
 import { cn } from '@/lib/utils';
 
+// Нижняя панель: четыре самых частых экрана. Остальное — в шапке и на главной.
 const studentNav = [
   { to: '/', label: 'Главная', icon: Home, end: true },
   { to: '/schedule', label: 'Расписание', icon: CalendarDays },
@@ -21,10 +26,17 @@ const studentNav = [
   { to: '/requests', label: 'Заявки', icon: FileText },
 ];
 
+const studentExtra = [
+  { to: '/history', label: 'Зачётка', icon: BookOpen, end: false },
+  { to: '/retakes', label: 'Пересдачи', icon: CalendarClock, end: false },
+  { to: '/documents', label: 'Документы', icon: Wallet, end: false },
+  { to: '/messages', label: 'Сообщения', icon: MessageSquare, end: false },
+];
+
 const staffNav = [
   { to: '/staff', label: 'Сводка', icon: Home, end: true },
   { to: '/staff/requests', label: 'Заявки', icon: Inbox },
-  { to: '/staff/schedule', label: 'Пары', icon: CalendarClock },
+  { to: '/staff/dialogs', label: 'Сообщения', icon: MessageSquare },
   { to: '/staff/announcements', label: 'Новости', icon: Megaphone },
 ];
 
@@ -50,6 +62,7 @@ export function AppShell() {
           </button>
 
           <div className="flex items-center gap-1">
+            {user.role === 'student' ? <SearchBox /> : null}
             {user.role === 'student' ? (
               <NavLink
                 to="/notifications"
@@ -83,12 +96,37 @@ export function AppShell() {
         </div>
       </header>
 
+      {user.role === 'student' ? (
+        <div className="border-b border-[var(--border)] bg-[var(--surface)] md:hidden">
+          <ul className="mx-auto flex max-w-3xl gap-1.5 overflow-x-auto px-4 py-2">
+            {studentExtra.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm font-medium',
+                      isActive
+                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                        : 'border-[var(--border)] text-[var(--muted)]',
+                    )
+                  }
+                >
+                  <item.icon className="size-4 shrink-0" />
+                  {item.label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <nav
         className="sticky top-14 z-20 hidden border-b border-[var(--border)] bg-[var(--surface)] md:block"
         aria-label="Разделы"
       >
-        <ul className="mx-auto flex max-w-3xl gap-1 px-4">
-          {nav.map((item) => (
+        <ul className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-4">
+          {[...nav, ...(user.role === 'student' ? studentExtra : [])].map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}

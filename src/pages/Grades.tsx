@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { BookOpen } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import type { GradeRow, SessionState } from '@shared/types';
@@ -57,7 +59,15 @@ export default function GradesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold sm:text-2xl">Успеваемость</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold sm:text-2xl">Успеваемость</h1>
+        <Link to="/history" className="min-h-11 text-sm font-medium text-[var(--accent)]">
+          <span className="inline-flex min-h-11 items-center gap-1">
+            <BookOpen className="size-4" />
+            Зачётная книжка
+          </span>
+        </Link>
+      </div>
 
       <SessionLight state={data.state} />
 

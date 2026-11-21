@@ -13,6 +13,11 @@ import NewRequestPage from '@/pages/NewRequest';
 import RequestDetailPage from '@/pages/RequestDetail';
 import NotificationsPage from '@/pages/Notifications';
 import ProfilePage from '@/pages/Profile';
+import DocumentsPage from '@/pages/Documents';
+import RetakesPage from '@/pages/Retakes';
+import MessagesPage from '@/pages/Messages';
+import HistoryPage from '@/pages/History';
+import StaffDialogsPage from '@/pages/staff/StaffDialogs';
 import StaffOverviewPage from '@/pages/staff/StaffOverview';
 import StaffRequestsPage from '@/pages/staff/StaffRequests';
 import StaffRequestDetailPage from '@/pages/staff/StaffRequestDetail';
@@ -149,6 +154,7 @@ export default function App() {
               <Route path="/staff/requests/:id" element={<StaffRequestDetailPage />} />
               <Route path="/staff/announcements" element={<StaffAnnouncementsPage />} />
               <Route path="/staff/schedule" element={<StaffSchedulePage />} />
+              <Route path="/staff/dialogs" element={<StaffDialogsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="*" element={<Navigate to="/staff" replace />} />
             </>
@@ -161,6 +167,10 @@ export default function App() {
               <Route path="/requests/new" element={<NewRequestPage />} />
               <Route path="/requests/:id" element={<RequestDetailPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/retakes" element={<RetakesPage />} />
+              <Route path="/messages" element={<MessagesPage />} />
+              <Route path="/history" element={<HistoryPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </>
