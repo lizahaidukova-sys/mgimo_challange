@@ -13,6 +13,7 @@ import { FieldError, Label, Textarea } from '@/components/ui/input';
 import { ErrorState, SkeletonCard } from '@/components/ui/states';
 import { statusVariant } from '@/components/SessionLight';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
+import { AttachmentList } from '@/components/request/AttachmentList';
 
 type StaffDetail = RequestDetail & { studentName: string; studentGroup: string };
 
@@ -107,6 +108,25 @@ export default function StaffRequestDetailPage() {
               <p className="mt-3 text-xs text-[var(--muted)]">
                 Срок: {formatDate(data.dueAt)}
                 {data.overdue ? ' · просрочено' : ''}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Документы от студента</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AttachmentList
+                requestId={data.id}
+                attachments={data.attachments}
+                canUpload={false}
+                onUploaded={load}
+                downloadBase={`/api/staff/requests/${data.id}/attachments`}
+              />
+              <p className="mt-3 text-xs text-[var(--muted)]">
+                Если документа не хватает, отклоните заявку с причиной — студент приложит файл
+                в своей карточке и увидит комментарий.
               </p>
             </CardContent>
           </Card>

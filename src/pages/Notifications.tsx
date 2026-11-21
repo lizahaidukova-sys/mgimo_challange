@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BellOff, CheckCheck, FileText, Megaphone, CalendarClock } from 'lucide-react';
+import { BellOff, CheckCheck, FileText, Megaphone, CalendarClock, MessageSquare } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/App';
 import type { NotificationRow } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,9 +18,11 @@ const kindMeta: Record<
   announcement: { icon: Megaphone, label: 'Объявление', variant: 'accent' },
   request_status: { icon: FileText, label: 'Заявка', variant: 'neutral' },
   schedule_change: { icon: CalendarClock, label: 'Расписание', variant: 'warning' },
+  message: { icon: MessageSquare, label: 'Сообщение', variant: 'accent' },
 };
 
 export default function NotificationsPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<NotificationRow[] | null>(null);
   const [unread, setUnread] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -132,8 +135,16 @@ export default function NotificationsPage() {
                 </Card>
               );
 
+              // Уведомление о сообщении ведёт туда, где на него можно ответить.
+              const role = user.role;
               const linkTo =
-                row.kind === 'request_status' && row.refId ? `/requests/${row.refId}` : null;
+                row.kind === 'request_status' && row.refId
+                  ? `/requests/${row.refId}`
+                  : row.kind === 'message'
+                    ? role === 'student'
+                      ? '/messages'
+                      : '/staff/dialogs'
+                    : null;
 
               return (
                 <li key={row.id}>

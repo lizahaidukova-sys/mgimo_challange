@@ -1,5 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { db, transaction } from '../server/db';
 import { hashPassword } from '../server/auth';
+import { attachmentStorageRoot } from '../server/attachments';
 import { mskTime, startOfMskWeek, startOfMskDay, addDays } from '../server/time';
 
 // Все данные вымышленные. Студенты, преподаватели, оценки и заявки созданы
@@ -35,6 +39,7 @@ export function seed(): void {
       'notifications',
       'announcements',
       'request_events',
+      'request_attachments',
       'requests',
       'enrollments',
       'lessons',
@@ -116,6 +121,17 @@ export function seed(): void {
     'Ирина Белова',
     'Деканат МЭО',
     'Сотрудник деканата',
+    0,
+    '',
+    iso(now),
+  );
+  insertUser.run(
+    'admin@demo.local',
+    passwordHash,
+    'admin',
+    'Админ Концепта',
+    'Деканат МЭО',
+    'Администратор концепта',
     0,
     '',
     iso(now),
@@ -377,6 +393,10 @@ export function seed(): void {
   const insertEvent = db.prepare(
     `INSERT INTO request_events (request_id, status, comment, actor_id, created_at) VALUES (?, ?, ?, ?, ?)`,
   );
+  const insertAttachment = db.prepare(
+    `INSERT INTO request_attachments (request_id, user_id, file_name, mime, size, storage_path, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
 
   type RequestSeed = {
     user: number;
@@ -489,6 +509,40 @@ export function seed(): void {
         iso(at(now, request.updatedDays, 14, 10)),
       );
     }
+
+    // Дмитрий по заявке на пересдачу уже дослал справку — так в демо видно,
+    // как выглядит требование деканата и ответ студента на него.
+    if (request.user === student2.id && request.status === 'rejected') {
+      const attachmentName = 'справка-врача.pdf';
+      const storagePath = path.join(String(requestId), `${randomUUID()}.pdf`);
+      const absolute = path.join(attachmentStorageRoot(), storagePath);
+      fs.mkdirSync(path.dirname(absolute), { recursive: true });
+      if (!fs.existsSync(absolute)) {
+        // Минимальный валидный PDF: демо-файл, реальных данных в нём нет.
+        const demoPdf =
+          '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
+          '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+          '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\n' +
+          'trailer<</Root 1 0 R>>\n%%EOF\n';
+        fs.writeFileSync(absolute, demoPdf, { mode: 0o600 });
+      }
+      insertAttachment.run(
+        requestId,
+        request.user,
+        attachmentName,
+        'application/pdf',
+        fs.statSync(absolute).size,
+        storagePath,
+        iso(at(now, request.updatedDays + 1, 10, 5)),
+      );
+      insertEvent.run(
+        requestId,
+        request.status,
+        `Приложен документ: ${attachmentName}`,
+        request.user,
+        iso(at(now, request.updatedDays + 1, 10, 5)),
+      );
+    }
   }
 
   // ---------- пересдачи: слоты и записи ----------
@@ -501,6 +555,8 @@ export function seed(): void {
     `INSERT INTO retake_bookings (slot_id, user_id, created_at) VALUES (?, ?, ?)`,
   );
 
+  // Слоты публикуются только по незакрытым дисциплинам: пересдавать сданное нельзя,
+  // поэтому слотов по Микроэкономике II и Анализу данных здесь нет.
   const econSlot = Number(
     insertSlot.run(currentCourses[1]!, rooms[0]!, iso(at(now, 3, 10, 0)), 90, 8, 'Эконометрика, пересдача экзамена').lastInsertRowid,
   );
@@ -510,10 +566,7 @@ export function seed(): void {
   const tradeSlot = Number(
     insertSlot.run(currentCourses[3]!, rooms[3]!, iso(at(now, 4, 14, 0)), 90, 6, 'Международная торговля, комиссия').lastInsertRowid,
   );
-  insertSlot.run(currentCourses[0]!, rooms[2]!, iso(at(now, 6, 9, 30)), 90, 8, 'Микроэкономика II, пересдача');
-  insertSlot.run(currentCourses[7]!, rooms[4]!, iso(at(now, 7, 11, 0)), 90, 8, 'Анализ данных, пересдача');
-
-  // Дмитрий уже записан на пересдачу по торговле.
+  // Дмитрий уже записан на пересдачу по торговле: это его единственный долг.
   insertBooking.run(tradeSlot, student2.id, iso(at(now, -3, 12, 0)));
   void econSlot;
   void philoSlot;
@@ -679,6 +732,25 @@ export function seed(): void {
     iso(at(now, -1, 18, 40)),
   );
 
+  // Пример уведомления о переписке: у Анны есть непрочитанный ответ деканата.
+  const answerMessage = db
+    .prepare(
+      `SELECT id FROM messages WHERE user_id = ? AND author_id = ? ORDER BY created_at DESC LIMIT 1`,
+    )
+    .get(student1.id, staff.id) as { id: number } | undefined;
+  if (answerMessage) {
+    insertNotification.run(
+      student1.id,
+      'message',
+      answerMessage.id,
+      'Сообщение от деканата',
+      'Добрый день! Справка готова, можно забрать в кабинете 214 с 10:00 до 17:00.',
+      `message:${answerMessage.id}:to:${student1.id}`,
+      null,
+      iso(at(now, -4, 16, 20)),
+    );
+  }
+
   void startOfMskDay;
   void addDays;
 }
@@ -687,6 +759,7 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1].replace(/\\
   seed();
   console.log(`Готово. Демо-пароль для всех аккаунтов: ${DEMO_PASSWORD}`);
   console.log('student1@demo.local — Анна Королёва, есть долги');
-  console.log('student2@demo.local — Дмитрий Соколов, всё закрыто');
+  console.log('student2@demo.local — Дмитрий Соколов, один просроченный долг');
   console.log('staff@demo.local — Ирина Белова, деканат');
+  console.log('admin@demo.local — Админ Концепта, редактирование базы');
 }

@@ -56,7 +56,7 @@ export default function MessagesPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold sm:text-2xl">Сообщения</h1>
       <p className="text-sm text-[var(--muted)]">
-        Переписка с деканатом. Ответ приходит сюда и в уведомления.
+        Переписка с деканатом. Ответ приходит сюда и в уведомления — со значком на колокольчике.
       </p>
 
       {loading ? <SkeletonCard rows={4} /> : null}

@@ -114,15 +114,45 @@ dean.example.ru {
 |---|---|
 | `GET /` | 200 |
 | `GET /api/health` | 200 |
-| Вход всеми тремя аккаунтами | 200 |
+| Вход всеми четырьмя аккаунтами | 200 |
 | Cookie | `HttpOnly; Secure; SameSite=Lax` |
 | Чужая заявка под студентом 1 | 404 |
 | Staff-очередь под студентом | 403 |
-| Мобильная вёрстка 360 px, 7 экранов | прокрутки нет, цели ≥ 44 px |
+| Админка под студентом и сотрудником | 403; под admin — 200 |
+| Мобильная вёрстка 360 px | 7 экранов кабинета и 6 вкладок админки: прокрутки нет, цели ≥ 44 px |
 | Создание заявки | 201, появилась в очереди деканата |
 | Смена статуса сотрудником | 200, студент получил уведомление |
 | `robots.txt`, `noindex` | на месте |
 | Доступ с зарубежного IP (Финляндия) | 200 |
+
+### 4a-1. Выкладка админки (21.11.2026, 09:35 МСК)
+
+На сервере нет git и rsync, поэтому код переносится архивом:
+
+```bash
+# локально
+tar czf /tmp/dean-src.tgz --exclude=node_modules --exclude=dist --exclude=data --exclude=.git --exclude=.env .
+scp "$(cygpath -w /tmp/dean-src.tgz)" root@62.109.16.195:/tmp/dean-src.tgz
+
+# на сервере
+systemctl stop dean
+tar xzf /tmp/dean-src.tgz -C /opt/dean/app --overwrite
+chown -R dean:dean /opt/dean/app
+cd /opt/dean/app && sudo -u dean npm install --no-audit --no-fund && sudo -u dean npm run build
+systemctl start dean
+```
+
+`.env`, `data/` и `node_modules` при распаковке не перезаписываются: их нет в архиве.
+
+Миграция `users` выполнилась при старте сервиса автоматически: `CHECK` расширен до `'admin'`, 6 заявок, 48 пар и 56 записей зачётки сохранились, `PRAGMA foreign_key_check` — 0 нарушений.
+
+**Важно:** `npm run seed` на сервере стирает живые данные. Аккаунт администратора добавлен отдельной вставкой, без сида:
+
+```bash
+cd /opt/dean/app && sudo -u dean npx tsx -e '...'   # INSERT users (role=admin) + audit
+```
+
+Восстановление предыдущей версии кода: `/opt/dean/app-src-before-admin-2026-11-21-0935.tar.gz`, базы — `/opt/dean/backups/app-2026-11-21-0934.db.gz`.
 
 ## 4b. Эксплуатация до 28.11
 
@@ -163,7 +193,7 @@ sudo systemctl start dean
 
 - База — один файл, бэкап: `cp data/app.db data/backup-$(date +%F).db`.
 - Перезапуск не теряет данные: SQLite в WAL, файл вне git.
-- Сброс демо: `sudo -u dean npm run seed`.
+- Сброс демо: кнопка «Перезапуск демо» в `/admin` (сессия админа сохраняется) или `sudo -u dean npm run seed`. Оба варианта стирают правки, сделанные через админку.
 - Логи не содержат паролей и payload'ов; пишется только факт входа и действий.
 
 ## 7. Если сервер недоступен из РФ

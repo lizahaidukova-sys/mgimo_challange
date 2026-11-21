@@ -154,7 +154,9 @@ function GradeList({ rows }: { rows: GradeRow[] }) {
                     ) : null}
                     {row.retakeCount > 0 ? (
                       <p className="mt-1 text-xs text-[var(--muted)]">
-                        Пересдач: {row.retakeCount}
+                        {row.status === 'passed'
+                          ? `Пересдач по дисциплине: ${row.retakeCount}`
+                          : `Использовано пересдач: ${row.retakeCount}`}
                       </p>
                     ) : null}
                   </div>

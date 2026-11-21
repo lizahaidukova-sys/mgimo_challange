@@ -36,13 +36,56 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
   }
 }
 
+// SQLite не умеет менять CHECK через ALTER TABLE. База, созданная до роли admin,
+// хранит CHECK (role IN ('student','staff')) и отвергнет администратора при вставке.
+// Пересоздаём таблицу с тем же набором колонок: id и внешние ключи сохраняются,
+// потому что ссылающиеся таблицы по-прежнему указывают на имя `users`.
+function widenUsersRoleCheck(): void {
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'`)
+    .get() as { sql: string } | undefined;
+  if (!row || row.sql.includes("'admin'")) return;
+
+  // PRAGMA бесполезен внутри транзакции — переключаем до её начала.
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    transaction(() => {
+      db.exec(`
+        CREATE TABLE users_migrated (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('student','staff','admin')),
+          full_name TEXT NOT NULL,
+          faculty TEXT NOT NULL DEFAULT '',
+          program TEXT NOT NULL DEFAULT '',
+          course INTEGER NOT NULL DEFAULT 1,
+          group_name TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO users_migrated (id, email, password_hash, role, full_name, faculty, program, course, group_name, created_at)
+          SELECT id, email, password_hash, role, full_name, faculty, program, course, group_name, created_at FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_migrated RENAME TO users;
+      `);
+    });
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+  // Строки, ссылающиеся на удалённого пользователя, не должны остаться сиротами.
+  const broken = db.prepare(`PRAGMA foreign_key_check`).all();
+  if (broken.length > 0) {
+    throw new Error(`миграция users нарушила внешние ключи: ${broken.length} строк`);
+  }
+}
+
 export function migrate(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('student','staff')),
+      role TEXT NOT NULL CHECK (role IN ('student','staff','admin')),
       full_name TEXT NOT NULL,
       faculty TEXT NOT NULL DEFAULT '',
       program TEXT NOT NULL DEFAULT '',
@@ -229,6 +272,21 @@ export function migrate(): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, created_at);
+
+    -- Файлы, приложенные студентом к заявке: справка от врача, скан, фото.
+    -- Содержимое лежит отдельным файлом на диске (storage_path), в базе — только
+    -- метаданные. Так база остаётся маленькой, а бэкап базы не тянет гигабайты.
+    CREATE TABLE IF NOT EXISTS request_attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      storage_path TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_request_attachments_request ON request_attachments(request_id);
   `);
 
   // Колонки, добавленные позже: нужны для зачётки и объявлений по группам.
@@ -236,6 +294,10 @@ export function migrate(): void {
   addColumnIfMissing('enrollments', 'semester_id', 'INTEGER');
   addColumnIfMissing('enrollments', 'hours', 'INTEGER');
   addColumnIfMissing('requests', 'priority', "TEXT NOT NULL DEFAULT 'normal'");
+
+  // После CREATE TABLE IF NOT EXISTS: на существующей базе таблица уже есть,
+  // и CHECK в ней всё ещё старый.
+  widenUsersRoleCheck();
 }
 
 migrate();

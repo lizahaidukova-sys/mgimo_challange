@@ -23,6 +23,14 @@ import StaffRequestsPage from '@/pages/staff/StaffRequests';
 import StaffRequestDetailPage from '@/pages/staff/StaffRequestDetail';
 import StaffAnnouncementsPage from '@/pages/staff/StaffAnnouncements';
 import StaffSchedulePage from '@/pages/staff/StaffSchedule';
+import { AdminLayout } from '@/pages/admin/AdminLayout';
+import AdminLessonsPage from '@/pages/admin/Lessons';
+import AdminTeachersPage from '@/pages/admin/Teachers';
+import AdminRoomsPage from '@/pages/admin/Rooms';
+import AdminCoursesPage from '@/pages/admin/Courses';
+import AdminSemestersPage from '@/pages/admin/Semesters';
+import AdminPeoplePage from '@/pages/admin/People';
+import AdminResetPage from '@/pages/admin/ResetDemo';
 import { SkeletonCard } from '@/components/ui/states';
 
 interface AuthContextValue {
@@ -146,7 +154,7 @@ export default function App() {
     <AuthContext.Provider value={contextValue!}>
       <Routes>
         <Route element={<AppShell />}>
-          {auth.user.role === 'staff' ? (
+          {auth.user.role !== 'student' ? (
             <>
               <Route path="/" element={<Navigate to="/staff" replace />} />
               <Route path="/staff" element={<StaffOverviewPage />} />
@@ -155,6 +163,18 @@ export default function App() {
               <Route path="/staff/announcements" element={<StaffAnnouncementsPage />} />
               <Route path="/staff/schedule" element={<StaffSchedulePage />} />
               <Route path="/staff/dialogs" element={<StaffDialogsPage />} />
+              {/* Колокольчик в шапке есть у всех ролей — маршрут нужен и деканату. */}
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<Navigate to="lessons" replace />} />
+                <Route path="lessons" element={<AdminLessonsPage />} />
+                <Route path="teachers" element={<AdminTeachersPage />} />
+                <Route path="rooms" element={<AdminRoomsPage />} />
+                <Route path="courses" element={<AdminCoursesPage />} />
+                <Route path="semesters" element={<AdminSemestersPage />} />
+                <Route path="people" element={<AdminPeoplePage />} />
+              </Route>
+              <Route path="/admin/reset" element={<AdminResetPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="*" element={<Navigate to="/staff" replace />} />
             </>

@@ -3,7 +3,8 @@
 // титры по фактической последовательности. Никаких монтажных трюков —
 // каждый кадр снят в реальном браузере на работающем приложении.
 //
-//   node scripts/record-demo.mjs [--out docs/demo] [--port 8796]
+//   node scripts/record-demo.mjs --view mobile    # docs/demo/demo-mobile.mp4
+//   node scripts/record-demo.mjs --view desktop   # docs/demo/demo-desktop.mp4
 //
 // Требует ffmpeg в PATH и Chrome (CHROME_PATH или стандартный путь).
 // Сервер сидируется и поднимается на временной базе, чтобы демо было одинаковым.
@@ -13,11 +14,21 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
+const view = readFlag('--view', 'mobile');
 const outDir = readFlag('--out', 'docs/demo');
-const port = Number(readFlag('--port', '8796'));
+const port = Number(readFlag('--port', view === 'desktop' ? '8797' : '8796'));
 const BASE = `http://127.0.0.1:${port}`;
-const frameDir = join(outDir, 'frames');
-const DB = './data/record.db';
+const DB = `./data/record-${view}.db`;
+
+// Два вида записываются отдельными файлами: 390×844 для телефона,
+// 1440×900 для десктопа. Подпись на десктопе шире и стоит ниже.
+const VIEWPORTS = {
+  mobile: { width: 390, height: 844, deviceScaleFactor: 2, scale: 780 },
+  desktop: { width: 1440, height: 900, deviceScaleFactor: 1, scale: 1440 },
+};
+if (!VIEWPORTS[view]) throw new Error(`неизвестный вид: ${view} (mobile или desktop)`);
+const viewport = VIEWPORTS[view];
+const frameDir = join(outDir, `frames-${view}`);
 
 function readFlag(name, fallback) {
   const index = args.indexOf(name);
@@ -28,7 +39,7 @@ function wait(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function waitForServer(timeoutMs = 25000) {
+async function waitForServer(timeoutMs = 30000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {
@@ -51,24 +62,111 @@ async function login(email) {
   return (response.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
 }
 
-// Сценарий: экран, подпись, сколько держать. Порядок = порядок в видео.
+// Сценарий: экран, подпись, сколько держать, кому показывать.
+// `open` — необязательное действие после загрузки (открыть модалку, выбрать вкладку).
+// Порядок = порядок в видео.
 const SCENES = [
+  {
+    path: '/login',
+    caption: 'Вход: четыре демо-аккаунта, пароль подставляется кнопкой',
+    hold: 4,
+    anonymous: true,
+  },
   {
     path: '/',
     caption: 'Главная: что сегодня, что изменилось, как дела с сессией',
+    hold: 5.5,
+  },
+  { path: '/schedule', caption: 'Расписание: день, переносы отмечены статусом', hold: 4.5 },
+  { path: '/schedule?view=week', caption: 'Неделя целиком: 22 пары, отмены отдельным цветом', hold: 4.5 },
+  { path: '/grades', caption: 'Успеваемость: оценки, долги, светофор сессии', hold: 5 },
+  {
+    path: '/grades',
+    caption: 'Долги отдельной вкладкой: что закрыть и в какой срок',
+    hold: 4,
+    open: async (page) => {
+      await page.evaluate(() => {
+        const tab = [...document.querySelectorAll('button[role="tab"]')].find((b) =>
+          b.textContent?.includes('Долги'),
+        );
+        tab?.click();
+      });
+    },
+  },
+  { path: '/history', caption: 'Зачётка: пять семестров, GPA и тренд', hold: 4.5 },
+  { path: '/requests', caption: 'Заявки: статус, срок в рабочих днях, история', hold: 4 },
+  {
+    path: '/requests/5',
+    caption: 'Заявка отклонена: причина видна, студент прикладывает справку',
     hold: 5,
   },
-  { path: '/schedule', caption: 'Расписание: день и неделя, переносы отмечены', hold: 4.5 },
-  { path: '/schedule?view=week', caption: null, hold: 4.5 },
-  { path: '/grades', caption: 'Успеваемость: оценки, долги, светофор сессии', hold: 5 },
-  { path: '/requests', caption: 'Заявки: статус, срок, история', hold: 4 },
-  { path: '/requests/1', caption: null, hold: 3.5 },
-  { path: '/notifications', caption: 'Уведомления: переносы, статусы, объявления', hold: 4 },
+  {
+    path: '/retakes',
+    caption: 'Пересдачи: только незакрытые дисциплины, сданное не предлагается',
+    hold: 5,
+  },
+  {
+    path: '/retakes',
+    caption: 'Перед записью — подтверждение: дата, аудитория, преподаватель, места',
+    hold: 5.5,
+    open: async (page) => {
+      await page.evaluate(() => {
+        const button = [...document.querySelectorAll('button')].find(
+          (b) => b.textContent?.trim() === 'Записаться',
+        );
+        button?.click();
+      });
+      await wait(500);
+    },
+  },
+  { path: '/notifications', caption: 'Уведомления: объявления, переносы, статусы, сообщения', hold: 4.5 },
+  { path: '/messages', caption: 'Переписка с деканатом: ответ приходит в уведомления', hold: 4 },
   { path: '/requests/new', caption: 'Новая заявка: четыре шага, срок в рабочих днях', hold: 5 },
-  { path: '/staff', caption: 'Деканат: очередь и обязательства', hold: 4.5, role: 'staff' },
-  { path: '/staff/requests', caption: null, hold: 4, role: 'staff' },
-  { path: '/staff/requests/1', caption: 'Смена статуса: причина отказа обязательна', hold: 5, role: 'staff' },
-  { path: '/profile', caption: 'Профиль: данные студента и границы доступа', hold: 3.5 },
+  { path: '/documents', caption: 'Документы и стипендия: номера, срок действия, выплаты', hold: 4.5 },
+  { path: '/profile', caption: 'Профиль: данные студента и границы доступа', hold: 4 },
+
+  { path: '/staff', caption: 'Деканат: сводка очереди и обязательства по срокам', hold: 5, role: 'staff' },
+  { path: '/staff/requests', caption: 'Очередь по сроку, а не по дате подачи', hold: 4.5, role: 'staff' },
+  {
+    path: '/staff/requests/1',
+    caption: 'Карточка заявки: данные, вложения, смена статуса',
+    hold: 5.5,
+    role: 'staff',
+  },
+  {
+    path: '/staff/dialogs',
+    caption: 'Переписка: ответ студенту уходит в его уведомления',
+    hold: 4.5,
+    role: 'staff',
+  },
+  { path: '/staff/announcements', caption: 'Объявление с выбором аудитории: все или группа', hold: 4, role: 'staff' },
+  { path: '/staff/schedule', caption: 'Правка пары: перенос виден студенту как статус', hold: 4.5, role: 'staff' },
+
+  {
+    path: '/admin/lessons',
+    caption: 'Админка для жюри: таблицы базы без SSH и SQL',
+    hold: 5.5,
+    role: 'admin',
+  },
+  { path: '/admin/teachers', caption: 'Преподаватели: поиск, создание, правка, удаление', hold: 4.5, role: 'admin' },
+  { path: '/admin/courses', caption: 'Дисциплины: преподаватель, зачётные единицы, форма контроля', hold: 4.5, role: 'admin' },
+  { path: '/admin/people', caption: 'Люди: студенты и сотрудники, аккаунты админов скрыты', hold: 4.5, role: 'admin' },
+  { path: '/admin/semesters', caption: 'Семестры: границы задают зачётку и отсчёт до сессии', hold: 4, role: 'admin' },
+  {
+    path: '/admin/lessons',
+    caption: 'Правка пары меняет то, что сразу видит студент',
+    hold: 5,
+    role: 'admin',
+    open: async (page) => {
+      await page.evaluate(() => {
+        const button = [...document.querySelectorAll('button')].find(
+          (b) => b.textContent?.trim() === 'Изменить',
+        );
+        button?.click();
+      });
+      await wait(600);
+    },
+  },
 ];
 
 async function main() {
@@ -101,6 +199,7 @@ async function main() {
     await waitForServer();
     const studentCookie = await login('student1@demo.local');
     const staffCookie = await login('staff@demo.local');
+    const adminCookie = await login('admin@demo.local');
 
     // puppeteer-core нужен только записи, приложению — нет:
     // поэтому импорт динамический, чтобы обычный запуск не тянул браузер.
@@ -112,7 +211,11 @@ async function main() {
     });
 
     const page = await browser.newPage();
-    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
+    await page.setViewport({
+      width: viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: viewport.deviceScaleFactor,
+    });
 
     const setSession = (cookie) =>
       page.setCookie({
@@ -122,37 +225,34 @@ async function main() {
         path: '/',
       });
 
+    const clearSession = () => page.deleteCookie({ name: 'dean_session', domain: '127.0.0.1', path: '/' });
+
     await setSession(studentCookie);
 
     const frames = [];
     let captionStart = 0;
-    const captions = [];
 
     for (const scene of SCENES) {
-      if (scene.role === 'staff') await setSession(staffCookie);
+      if (scene.anonymous) await clearSession();
+      else if (scene.role === 'staff') await setSession(staffCookie);
+      else if (scene.role === 'admin') await setSession(adminCookie);
       else await setSession(studentCookie);
 
       await page.goto(`${BASE}${scene.path}`, { waitUntil: 'networkidle0' });
-      await wait(700);
+      await wait(800);
 
-      if (scene.caption) await showCaption(page, scene.caption);
+      if (scene.open) await scene.open(page);
+
+      if (scene.caption) await showCaption(page, scene.caption, view);
       else await hideCaption(page);
 
       const path = join(frameDir, `f${String(frames.length).padStart(4, '0')}.png`);
       await page.screenshot({ path });
       frames.push({ path, hold: scene.hold });
-
-      if (scene.caption) {
-        captions.push({
-          from: captionStart,
-          to: captionStart + scene.hold,
-          text: scene.caption,
-        });
-      }
       captionStart += scene.hold;
     }
 
-    console.log(`кадров: ${frames.length}, длительность: ${captionStart.toFixed(1)} с`);
+    console.log(`вид: ${view}, кадров: ${frames.length}, длительность: ${captionStart.toFixed(1)} с`);
 
     const listLines = [];
     for (const frame of frames) {
@@ -161,14 +261,14 @@ async function main() {
       listLines.push(`duration ${frame.hold.toFixed(3)}`);
     }
     listLines.push(`file '${resolve(frames[frames.length - 1].path).replace(/\\/g, '/')}'`);
-    const listPath = resolve(outDir, 'frames.txt');
+    const listPath = resolve(outDir, `frames-${view}.txt`);
     writeFileSync(listPath, listLines.join('\n'), 'utf8');
 
     // Подписи рисуются в самой странице перед снимком: так шрифт, переносы
     // и фон контролируются CSS, а не экранированием ffmpeg.
-    const filterChain = ['scale=780:-2:flags=lanczos', 'fps=25', 'format=yuv420p'].join(',');
+    const filterChain = [`scale=${viewport.scale}:-2:flags=lanczos`, 'fps=25', 'format=yuv420p'].join(',');
 
-    const output = join(outDir, 'demo.mp4');
+    const output = join(outDir, `demo-${view}.mp4`);
     await runFfmpeg([
       '-y',
       '-f', 'concat',
@@ -198,37 +298,40 @@ async function main() {
       try {
         if (existsSync(`${DB}${suffix}`)) rmSync(`${DB}${suffix}`);
       } catch {
-        // файл ещё держит процесс — он в .gitignore
+        // Windows держит файл до выхода процесса — не мешает записи.
       }
     }
   }
 }
 
-// Плашка с подписью живёт в DOM поверх интерфейса, но не перехватывает клики.
-async function showCaption(page, text) {
-  await page.evaluate((caption) => {
-    let node = document.getElementById('demo-caption');
-    if (!node) {
-      node = document.createElement('div');
-      node.id = 'demo-caption';
-      Object.assign(node.style, {
-        position: 'fixed',
-        left: '12px',
-        right: '12px',
-        bottom: '78px',
-        zIndex: '9999',
-        background: 'rgba(16,24,40,0.88)',
-        color: '#fff',
-        font: '500 15px/1.35 "Segoe UI", Arial, sans-serif',
-        padding: '10px 14px',
-        borderRadius: '10px',
-        textAlign: 'center',
-        pointerEvents: 'none',
-      });
-      document.body.appendChild(node);
-    }
-    node.textContent = caption;
-  }, text);
+async function showCaption(page, text, viewName) {
+  await page.evaluate(
+    ({ caption, view: v }) => {
+      let node = document.getElementById('demo-caption');
+      if (!node) {
+        node = document.createElement('div');
+        node.id = 'demo-caption';
+        Object.assign(node.style, {
+          position: 'fixed',
+          left: v === 'desktop' ? 'auto' : '12px',
+          right: v === 'desktop' ? '24px' : '12px',
+          bottom: v === 'desktop' ? '24px' : '78px',
+          maxWidth: v === 'desktop' ? '520px' : 'none',
+          zIndex: '9999',
+          background: 'rgba(16,24,40,0.9)',
+          color: '#fff',
+          font: v === 'desktop' ? '500 17px/1.4 "Segoe UI", Arial, sans-serif' : '500 15px/1.35 "Segoe UI", Arial, sans-serif',
+          padding: '10px 14px',
+          borderRadius: '10px',
+          textAlign: 'center',
+          pointerEvents: 'none',
+        });
+        document.body.appendChild(node);
+      }
+      node.textContent = caption;
+    },
+    { caption: text, view: viewName },
+  );
 }
 
 async function hideCaption(page) {

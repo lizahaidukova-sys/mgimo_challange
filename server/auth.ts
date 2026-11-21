@@ -158,6 +158,19 @@ export function requireStaff(req: AuthedRequest, res: Response, next: NextFuncti
   next();
 }
 
+// Редактирование всей базы: отдельная роль, staff его не получает.
+export function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    res.status(401).json({ error: 'Требуется вход' });
+    return;
+  }
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ error: 'Недостаточно прав' });
+    return;
+  }
+  next();
+}
+
 // Лимит попыток входа: 10 на e-mail за 10 минут. Хранится в памяти процесса.
 const attempts = new Map<string, { count: number; resetAt: number }>();
 

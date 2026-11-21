@@ -226,7 +226,108 @@ export function getRequest(userId: number, requestId: number): RequestDetail | n
       actorName: event.actor_name as string,
       createdAt: event.created_at as string,
     })),
+    attachments: requestAttachments(requestId),
   };
+}
+
+export interface AttachmentRow {
+  id: number;
+  requestId: number;
+  fileName: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+}
+
+export function requestAttachments(requestId: number): AttachmentRow[] {
+  const rows = db
+    .prepare(
+      `SELECT id, request_id, file_name, mime, size, created_at
+       FROM request_attachments WHERE request_id = ? ORDER BY created_at ASC`,
+    )
+    .all(requestId) as Record<string, unknown>[];
+  return rows.map((row) => ({
+    id: row.id as number,
+    requestId: row.request_id as number,
+    fileName: row.file_name as string,
+    mime: row.mime as string,
+    size: row.size as number,
+    createdAt: row.created_at as string,
+  }));
+}
+
+/**
+ * Заявка, к которой студенту разрешено приложить файл.
+ *
+ * Возвращает null и для чужой, и для несуществующей заявки: экран должен
+ * отвечать 404 одинаково, иначе перебором id можно выяснить, что заявка есть.
+ */
+export function requestsForAttachment(userId: number, requestId: number): {
+  status: RequestStatus;
+  staffComment: string | null;
+} | null {
+  const row = db
+    .prepare(`SELECT status, staff_comment FROM requests WHERE id = ? AND user_id = ?`)
+    .get(requestId, userId) as { status: RequestStatus; staff_comment: string | null } | undefined;
+  return row ? { status: row.status, staffComment: row.staff_comment } : null;
+}
+
+export function addRequestAttachment(
+  userId: number,
+  requestId: number,
+  input: { fileName: string; mime: string; size: number; storagePath: string },
+): AttachmentRow {
+  const now = new Date().toISOString();
+  const id = Number(
+    db
+      .prepare(
+        `INSERT INTO request_attachments (request_id, user_id, file_name, mime, size, storage_path, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(requestId, userId, input.fileName, input.mime, input.size, input.storagePath, now)
+      .lastInsertRowid,
+  );
+  // Событие в истории: деканат должен видеть, что студент дослал документ.
+  db.prepare(
+    `INSERT INTO request_events (request_id, status, comment, actor_id, created_at)
+     VALUES (?, (SELECT status FROM requests WHERE id = ?), ?, ?, ?)`,
+  ).run(requestId, requestId, `Приложен документ: ${input.fileName}`, userId, now);
+
+  db.prepare(`UPDATE requests SET updated_at = ? WHERE id = ?`).run(now, requestId);
+  audit(userId, 'request.attach', 'request', requestId, { fileName: input.fileName, size: input.size });
+  return { id, requestId, fileName: input.fileName, mime: input.mime, size: input.size, createdAt: now };
+}
+
+export function attachmentForDownload(
+  userId: number,
+  requestId: number,
+  attachmentId: number,
+): { fileName: string; mime: string; storagePath: string } | null {
+  const row = db
+    .prepare(
+      `SELECT a.file_name, a.mime, a.storage_path
+       FROM request_attachments a JOIN requests r ON r.id = a.request_id
+       WHERE a.id = ? AND a.request_id = ? AND r.user_id = ?`,
+    )
+    .get(attachmentId, requestId, userId) as
+    | { file_name: string; mime: string; storage_path: string }
+    | undefined;
+  return row ? { fileName: row.file_name, mime: row.mime, storagePath: row.storage_path } : null;
+}
+
+export function attachmentForStaffDownload(
+  requestId: number,
+  attachmentId: number,
+): { fileName: string; mime: string; storagePath: string } | null {
+  const row = db
+    .prepare(
+      `SELECT file_name, mime, storage_path FROM request_attachments
+       WHERE id = ? AND request_id = ?`,
+    )
+    .get(attachmentId, requestId) as
+    | { file_name: string; mime: string; storage_path: string }
+    | undefined;
+  return row ? { fileName: row.file_name, mime: row.mime, storagePath: row.storage_path } : null;
 }
 
 // Срок в рабочих днях по Москве: считаем от начала следующих суток,
@@ -530,7 +631,59 @@ export function semesterResults(userId: number): SemesterResult[] {
 
 // ---------- пересдачи ----------
 
-export function retakeSlots(userId: number): RetakeSlot[] {
+// По регламенту прототипа пересдать дисциплину можно, только если она не закрыта:
+// статус «долг» или «не сдано». Сданная дисциплина закрыта даже при пересдачах
+// в истории — иначе вкладка предлагала бы записаться на то, что уже сдано.
+export const RETAKE_LIMIT = 2;
+
+type SlotRow = Record<string, unknown>;
+
+function mapSlotUserState(userId: number, row: SlotRow): RetakeSlot {
+  const courseId = row.course_id as number;
+  const enrollment = db
+    .prepare(`SELECT status, grade, retake_count FROM enrollments WHERE user_id = ? AND course_id = ?`)
+    .get(userId, courseId) as
+    | { status: string; grade: number | null; retake_count: number }
+    | undefined;
+
+  const base = {
+    id: row.id as number,
+    courseId,
+    courseTitle: row.course_title as string,
+    teacherName: row.teacher_name as string,
+    roomName: row.room_name as string,
+    startsAt: row.starts_at as string,
+    durationMin: row.duration_min as number,
+    capacity: row.capacity as number,
+    booked: row.booked as number,
+    myBookingId: (row.my_booking_id as number | null) ?? null,
+    comment: (row.comment as string | null) ?? null,
+    retakeCount: enrollment?.retake_count ?? 0,
+    retakeLimit: RETAKE_LIMIT,
+  };
+
+  // Дисциплина не входит в учебный план студента — записываться некуда.
+  if (!enrollment) {
+    return { ...base, eligible: false, blockedReason: 'not_enrolled' as const };
+  }
+  const open = enrollment.status === 'debt' || enrollment.status === 'failed';
+  if (!open) {
+    return { ...base, eligible: false, blockedReason: 'passed' as const };
+  }
+  if (enrollment.retake_count >= RETAKE_LIMIT) {
+    return { ...base, eligible: false, blockedReason: 'limit' as const };
+  }
+  return { ...base, eligible: true, blockedReason: null };
+}
+
+/**
+ * Слоты пересдач для студента.
+ *
+ * `includeIneligible` нужен только админке и проверкам: обычному пользователю
+ * сданные дисциплины не показываются вовсе, иначе список выглядит как «можно
+ * записаться на что угодно».
+ */
+export function retakeSlots(userId: number, includeIneligible = false): RetakeSlot[] {
   const rows = db
     .prepare(
       `SELECT s.id, s.course_id, c.title AS course_title, t.full_name AS teacher_name,
@@ -544,21 +697,32 @@ export function retakeSlots(userId: number): RetakeSlot[] {
        WHERE s.starts_at >= ?
        ORDER BY s.starts_at ASC`,
     )
-    .all(userId, addDays(new Date(), -1).toISOString()) as Record<string, unknown>[];
+    .all(userId, addDays(new Date(), -1).toISOString()) as SlotRow[];
 
-  return rows.map((row) => ({
-    id: row.id as number,
-    courseId: row.course_id as number,
-    courseTitle: row.course_title as string,
-    teacherName: row.teacher_name as string,
-    roomName: row.room_name as string,
-    startsAt: row.starts_at as string,
-    durationMin: row.duration_min as number,
-    capacity: row.capacity as number,
-    booked: row.booked as number,
-    myBookingId: (row.my_booking_id as number | null) ?? null,
-    comment: (row.comment as string | null) ?? null,
-  }));
+  const slots = rows.map((row) => mapSlotUserState(userId, row));
+  if (includeIneligible) return slots;
+
+  // Своя запись видна всегда: отменить её студент должен даже при смене статуса.
+  return slots.filter((slot) => slot.eligible || slot.myBookingId !== null);
+}
+
+/** Причина отказа в пересдаче для слота, или null если запись разрешена. */
+function retakeEligibility(userId: number, courseId: number): string | null {
+  const enrollment = db
+    .prepare(`SELECT status, grade, retake_count FROM enrollments WHERE user_id = ? AND course_id = ?`)
+    .get(userId, courseId) as
+    | { status: string; grade: number | null; retake_count: number }
+    | undefined;
+
+  if (!enrollment) return 'Дисциплина не входит в ваш учебный план';
+  const open = enrollment.status === 'debt' || enrollment.status === 'failed';
+  if (!open) {
+    return 'Дисциплина сдана — пересдача не требуется';
+  }
+  if (enrollment.retake_count >= RETAKE_LIMIT) {
+    return `Лимит пересдач исчерпан (${RETAKE_LIMIT})`;
+  }
+  return null;
 }
 
 export function bookRetake(
@@ -567,16 +731,20 @@ export function bookRetake(
 ): { ok: true } | { ok: false; reason: string } {
   const slot = db
     .prepare(
-      `SELECT s.id, s.capacity, s.starts_at,
+      `SELECT s.id, s.course_id, s.capacity, s.starts_at,
               (SELECT COUNT(*) FROM retake_bookings b WHERE b.slot_id = s.id) AS booked
        FROM retake_slots s WHERE s.id = ?`,
     )
-    .get(slotId) as { id: number; capacity: number; starts_at: string; booked: number } | undefined;
+    .get(slotId) as
+    | { id: number; course_id: number; capacity: number; starts_at: string; booked: number }
+    | undefined;
 
   if (!slot) return { ok: false, reason: 'Слот не найден' };
   if (new Date(slot.starts_at).getTime() < Date.now()) {
     return { ok: false, reason: 'Пересдача уже прошла' };
   }
+  const blocked = retakeEligibility(userId, slot.course_id);
+  if (blocked) return { ok: false, reason: blocked };
   const existing = db
     .prepare(`SELECT id FROM retake_bookings WHERE slot_id = ? AND user_id = ?`)
     .get(slotId, userId);
@@ -586,7 +754,7 @@ export function bookRetake(
   db.prepare(
     `INSERT INTO retake_bookings (slot_id, user_id, created_at) VALUES (?, ?, ?)`,
   ).run(slotId, userId, new Date().toISOString());
-  audit(userId, 'retake.book', 'retake_slot', slotId, {});
+  audit(userId, 'retake.book', 'retake_slot', slotId, { courseId: slot.course_id });
   return { ok: true };
 }
 
@@ -663,9 +831,46 @@ export function sendMessage(userId: number, authorId: number, body: string): Mes
       `INSERT INTO messages (user_id, author_id, body, read_at, created_at) VALUES (?, ?, ?, ?, ?)`,
     )
     .run(userId, authorId, body, authorId === userId ? now : null, now);
-  audit(authorId, 'message.send', 'message', Number(info.lastInsertRowid), {});
+  const messageId = Number(info.lastInsertRowid);
+
+  // Переписка должна быть видна обеим сторонам, а не только в разделе «Сообщения»:
+  // иначе ответ деканата теряется, пока студент не откроет страницу сам.
+  const author = db
+    .prepare(`SELECT full_name, role FROM users WHERE id = ?`)
+    .get(authorId) as { full_name: string; role: string } | undefined;
+  const preview = body.length > 140 ? `${body.slice(0, 140)}…` : body;
+
+  if (authorId !== userId) {
+    // Деканат написал студенту.
+    notify(
+      userId,
+      'message',
+      'Сообщение от деканата',
+      preview,
+      messageId,
+      `message:${messageId}:to:${userId}`,
+    );
+  }
+  if (author?.role === 'student') {
+    // Студент написал в деканат: уведомляем всех, кто может ответить.
+    const recipients = db
+      .prepare(`SELECT id FROM users WHERE role IN ('staff','admin')`)
+      .all() as { id: number }[];
+    for (const recipient of recipients) {
+      notify(
+        recipient.id,
+        'message',
+        `Сообщение от студента: ${author.full_name}`,
+        preview,
+        messageId,
+        `message:${messageId}:to:${recipient.id}`,
+      );
+    }
+  }
+
+  audit(authorId, 'message.send', 'message', messageId, {});
   return {
-    id: Number(info.lastInsertRowid),
+    id: messageId,
     body,
     authorName: '',
     mine: authorId === userId,
@@ -698,13 +903,31 @@ export function deanDialogs(): DeanMessage[] {
 }
 
 export function markDialogRead(userId: number): number {
-  return Number(
+  const now = new Date().toISOString();
+  const changes = Number(
     db
       .prepare(
         `UPDATE messages SET read_at = ? WHERE user_id = ? AND read_at IS NULL AND author_id != ?`,
       )
-      .run(new Date().toISOString(), userId, userId).changes,
+      .run(now, userId, userId).changes,
   );
+  // Прочитанная переписка закрывает и уведомления о ней: иначе бейдж горит,
+  // хотя человек уже видел сообщение.
+  db.prepare(
+    `UPDATE notifications SET read_at = ?
+     WHERE user_id = ? AND kind = 'message' AND read_at IS NULL
+       AND ref_id IN (SELECT id FROM messages WHERE user_id = ? AND author_id != ?)`,
+  ).run(now, userId, userId, userId);
+  return changes;
+}
+
+/** Деканат открыл диалог: гасим уведомления о сообщениях этого студента. */
+export function markStudentDialogsReadForStaff(studentId: number, staffId: number): void {
+  db.prepare(
+    `UPDATE notifications SET read_at = ?
+     WHERE user_id = ? AND kind = 'message' AND read_at IS NULL
+       AND ref_id IN (SELECT id FROM messages WHERE user_id = ? AND author_id = ?)`,
+  ).run(new Date().toISOString(), staffId, studentId, studentId);
 }
 
 // ---------- поиск по кабинету ----------

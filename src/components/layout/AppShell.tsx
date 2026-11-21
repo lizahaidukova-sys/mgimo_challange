@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Bell,
   BookOpen,
+  Database,
   CalendarDays,
   FileText,
   GraduationCap,
@@ -40,10 +41,16 @@ const staffNav = [
   { to: '/staff/announcements', label: 'Новости', icon: Megaphone },
 ];
 
+// Админка — пятый пункт нижней панели: у роли admin нет поиска и уведомлений,
+// зато редактирование базы — основная работа.
+const adminNav = [...staffNav, { to: '/admin', label: 'Админка', icon: Database }];
+
 export function AppShell() {
   const { user, unread, logout } = useAuth();
   const navigate = useNavigate();
-  const nav = user.role === 'staff' ? staffNav : studentNav;
+  const isStudent = user.role === 'student';
+  const nav = isStudent ? studentNav : user.role === 'admin' ? adminNav : staffNav;
+  const homePath = isStudent ? '/' : '/staff';
 
   return (
     <div className="min-h-dvh bg-[var(--bg)]">
@@ -51,7 +58,7 @@ export function AppShell() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 lg:px-6">
           <button
             type="button"
-            onClick={() => navigate(user.role === 'staff' ? '/staff' : '/')}
+            onClick={() => navigate(homePath)}
             className="flex min-h-11 items-center gap-2 text-left"
             aria-label="На главную"
           >
@@ -62,21 +69,19 @@ export function AppShell() {
           </button>
 
           <div className="flex items-center gap-0.5 sm:gap-1">
-            {user.role === 'student' ? <SearchBox /> : null}
-            {user.role === 'student' ? (
-              <NavLink
-                to="/notifications"
-                className="relative grid h-11 w-11 place-items-center rounded-[8px] hover:bg-[var(--bg)]"
-                aria-label={unread > 0 ? `Уведомления, непрочитанных: ${unread}` : 'Уведомления'}
-              >
-                <Bell className="size-5 text-[var(--muted)]" />
-                {unread > 0 ? (
-                  <span className="absolute right-1.5 top-1.5 grid min-w-[18px] place-items-center rounded-full bg-[var(--error)] px-1 text-[11px] font-semibold leading-4 text-white">
-                    {unread > 9 ? '9+' : unread}
-                  </span>
-                ) : null}
-              </NavLink>
-            ) : null}
+            {isStudent ? <SearchBox /> : null}
+            <NavLink
+              to="/notifications"
+              className="relative grid h-11 w-11 place-items-center rounded-[8px] hover:bg-[var(--bg)]"
+              aria-label={unread > 0 ? `Уведомления, непрочитанных: ${unread}` : 'Уведомления'}
+            >
+              <Bell className="size-5 text-[var(--muted)]" />
+              {unread > 0 ? (
+                <span className="absolute right-1.5 top-1.5 grid min-w-[18px] place-items-center rounded-full bg-[var(--error)] px-1 text-[11px] font-semibold leading-4 text-white">
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              ) : null}
+            </NavLink>
             <NavLink
               to="/profile"
               className="grid h-11 w-11 place-items-center rounded-[8px] hover:bg-[var(--bg)]"
@@ -127,7 +132,7 @@ export function AppShell() {
       >
         <ul className="mx-auto flex max-w-6xl gap-1 px-4 lg:px-6">
           {/* Пункты меню не сжимаются: иначе «Расписание» рвётся по слогам. */}
-          {[...nav, ...(user.role === 'student' ? studentExtra : [])].map((item) => (
+          {[...nav, ...(isStudent ? studentExtra : [])].map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}
@@ -161,7 +166,7 @@ export function AppShell() {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)] md:hidden"
         aria-label="Основная навигация"
       >
-        <ul className="mx-auto grid max-w-6xl grid-cols-4">
+        <ul className={cn('mx-auto grid max-w-6xl', nav.length === 5 ? 'grid-cols-5' : 'grid-cols-4')}>
           {nav.map((item) => (
             <li key={item.to}>
               <NavLink

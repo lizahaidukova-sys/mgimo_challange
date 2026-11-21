@@ -1,6 +1,6 @@
 // Общие типы клиента и сервера. Единственный источник правды для статусов.
 
-export type Role = 'student' | 'staff';
+export type Role = 'student' | 'staff' | 'admin';
 
 export type RequestStatus = 'submitted' | 'in_progress' | 'ready' | 'rejected';
 export type RequestType =
@@ -100,6 +100,14 @@ export interface RetakeSlot {
   booked: number;
   myBookingId: number | null;
   comment: string | null;
+  /** Сколько раз дисциплина уже пересдавалась студентом. */
+  retakeCount: number;
+  /** Студент имеет право на пересдачу: долг/не сдано или пересдача уже была. */
+  eligible: boolean;
+  /** Почему запись недоступна: сдано, не изучалось, лимит исчерпан. */
+  blockedReason: 'passed' | 'not_enrolled' | 'limit' | null;
+  /** Разрешённое число пересдач по регламенту прототипа. */
+  retakeLimit: number;
 }
 
 export interface DocumentRow {
@@ -185,13 +193,22 @@ export interface RequestRow {
   payload: Record<string, string>;
 }
 
+export interface RequestAttachment {
+  id: number;
+  fileName: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+}
+
 export interface RequestDetail extends RequestRow {
   events: RequestEvent[];
+  attachments: RequestAttachment[];
 }
 
 export interface NotificationRow {
   id: number;
-  kind: 'announcement' | 'request_status' | 'schedule_change';
+  kind: 'announcement' | 'request_status' | 'schedule_change' | 'message';
   title: string;
   body: string;
   refId: number | null;

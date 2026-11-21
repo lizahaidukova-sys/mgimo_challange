@@ -53,4 +53,19 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body) }),
+  del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /** Отправка файла сырыми байтами: тип и имя — в заголовках, без multipart. */
+  upload: <T>(path: string, file: File) =>
+    request<T>(path, {
+      method: 'PUT',
+      headers: {
+        'content-type': file.type || 'application/octet-stream',
+        // HTTP-заголовки не несут UTF-8: кириллица в имени иначе превращается
+        // в кракозябры. Кодируем и раскодируем на сервере.
+        'x-file-name': encodeURIComponent(file.name),
+      },
+      body: file,
+    }),
 };

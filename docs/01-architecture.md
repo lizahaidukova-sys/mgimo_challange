@@ -12,7 +12,7 @@
 | Пароли | `node:crypto` scrypt | встроено, без нативных сборок, стойко |
 | Сессии | подписанная httpOnly cookie + запись в БД | отзыв сессии возможен, токен не читается JS |
 | ИИ-помощник | правила + опциональный LLM | демо работает без ключей, результат воспроизводим |
-| Деплой | `next build` standalone + systemd + reverse proxy | без Docker, минимум движущихся частей |
+| Деплой | `vite build` + Express раздаёт `dist/` + systemd + Caddy | без Docker, минимум движущихся частей |
 
 Отказ от ORM и от метафреймворка: запросов мало, схема явная, SQL читается человеком и проверяется в `scripts/`. Next.js не взят: его серверные экшены скрывают путь запроса, а для проверки доступа нужен явный HTTP-слой.
 
@@ -41,14 +41,22 @@ flowchart TB
 | `/grades` | студент | дисциплины, оценки, зачёты, GPA, долги |
 | `/requests` | студент | список заявок и статусов |
 | `/requests/new` | студент | создание по шаблону |
-| `/requests/[id]` | студент | детали, история, причина отказа (404 на чужую) |
+| `/requests/[id]` | студент | детали, история, причина отказа, загрузка справки (404 на чужую) |
 | `/notifications` | студент | объявления и события |
 | `/profile` | студент | профиль, выход |
 | `/staff` | сотрудник | сводка очереди |
 | `/staff/requests` | сотрудник | очередь, фильтры, SLA |
-| `/staff/requests/[id]` | сотрудник | смена статуса, комментарий |
+| `/staff/requests/[id]` | сотрудник | смена статуса, комментарий, скачивание вложений |
 | `/staff/announcements` | сотрудник | публикация объявления |
 | `/staff/schedule` | сотрудник | перенос/отмена пары |
+| `/admin` | админ | пары: список, создание, правка, удаление |
+| `/admin/teachers` | админ | преподаватели |
+| `/admin/rooms` | админ | аудитории |
+| `/admin/courses` | админ | дисциплины |
+| `/admin/semesters` | админ | семестры |
+| `/admin/people` | админ | студенты и сотрудники |
+| `/admin/reset` | админ | перезапуск демо-сида |
+| `/api/admin/*` | админ | REST: GET/POST/PATCH/DELETE по шести сущностям + `reset-demo` |
 | `/api/health` | все | проверка живости для деплоя |
 
 Мутации — server actions. Публичный REST не нужен и не расширяет поверхность атаки.
@@ -80,11 +88,16 @@ erDiagram
 | `enrollments` | `id, user_id, course_id, grade, grade_kind, retake_count, status` | user_id+course_id UNIQUE |
 | `requests` | `id, user_id, type, template, payload_json, status, due_at, staff_comment, created_at, updated_at` | user_id, status |
 | `request_events` | `id, request_id, status, comment, actor_id, created_at` | request_id |
+| `request_attachments` | `id, request_id, user_id, file_name, mime, size, storage_path, created_at` — файл лежит в `data/attachments/<request_id>/` | request_id |
 | `announcements` | `id, title, body, audience, published_at, author_id` | published_at |
 | `notifications` | `id, user_id, kind, ref_id, title, body, read_at, created_at` | user_id+read_at |
 | `audit_log` | `id, actor_id, action, entity, entity_id, meta_json, created_at` | actor_id, entity |
 
 Поля-статусы — только из перечня в коде (TS union), свободные строки не принимаются.
+
+### 4.1 Миграция роли admin
+
+Схема `users` создавалась с `CHECK (role IN ('student','staff'))`. SQLite не меняет CHECK через `ALTER TABLE`, поэтому `widenUsersRoleCheck()` в `server/db.ts` читает `sqlite_master.sql` и, если `admin` в CHECK нет, пересоздаёт таблицу: `PRAGMA foreign_keys=OFF` → копия строк в `users_migrated` → `DROP TABLE users` → `RENAME` → `PRAGMA foreign_keys=ON` → `PRAGMA foreign_key_check`. Идентификаторы сохраняются, поэтому внешние ключи сессий, заявок, зачёток и сообщений остаются валидными. Функция идемпотентна: на новой базе CHECK уже содержит `admin`, и она сразу выходит.
 
 ## 5. Ключевые потоки
 
@@ -140,12 +153,12 @@ sequenceDiagram
 | `LLM_MODEL` | нет | имя модели |
 | `APP_ORIGIN` | нет | проверка origin при мутациях |
 
-Секреты читаются только на сервере. В клиентский бандл не попадает ничего, кроме `NEXT_PUBLIC_`-переменных, которых в проекте нет.
+Секреты читаются только на сервере. В клиентский бандл не попадает ничего: переменных окружения с префиксом `VITE_` в проекте нет вовсе, клиент общается с API по относительным путям.
 
 ## 7. Переносимость
 
 - Зависимости фиксируются `package-lock.json`; все — чистый JS, без node-gyp.
-- Проверено: чистый клон на Node 24, `npm ci` за 9 секунд, без Visual Studio.
+- Проверено: чистый клон, `npm install` без Visual Studio и без node-gyp. `npm ci` на Windows сходится, но лок-файл собран под Windows: на Linux используйте `npm install` (см. `docs/10-deploy.md`).
 - База создаётся миграциями и сидом, а не «файлом от разработчика».
 - Запуск не требует Docker, глобальных пакетов и GUI.
-- Деплой описывается в `docs/07-time-cost.md` и `README`.
+- Деплой описывается в `docs/10-deploy.md` и `README`.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Clock3, Undo2 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorState, SkeletonCard } from '@/components/ui/states';
 import { statusVariant } from '@/components/SessionLight';
 import { formatDate, formatDateTime } from '@/lib/utils';
+import { AttachmentList } from '@/components/request/AttachmentList';
 
 export default function RequestDetailPage() {
   const { id } = useParams();
@@ -16,7 +17,7 @@ export default function RequestDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     setLoading(true);
     setError(null);
     api
@@ -25,6 +26,8 @@ export default function RequestDetailPage() {
       .catch((caught: Error) => setError(caught.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(reload, [reload]);
 
   return (
     <div className="space-y-4">
@@ -102,6 +105,21 @@ export default function RequestDetailPage() {
                   </div>
                 ))}
               </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Документы</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AttachmentList
+                requestId={data.id}
+                attachments={data.attachments}
+                // К выполненной заявке досылать нечего: деканат её уже закрыл.
+                canUpload={data.status !== 'ready'}
+                onUploaded={reload}
+              />
             </CardContent>
           </Card>
 

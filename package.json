@@ -19,8 +19,9 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run verify:rules && npm run verify:wording && npm run verify:secrets && npm run verify:idor",
     "build:jury": "tsx scripts/build-jury-pdf.ts",
-    "record:demo": "node scripts/record-demo.mjs --out docs/demo",
-    "verify:wording": "tsx scripts/check-wording.ts"
+    "record:demo": "node scripts/record-demo.mjs --view mobile",
+    "verify:wording": "tsx scripts/check-wording.ts",
+    "record:demo:desktop": "node scripts/record-demo.mjs --view desktop"
   },
   "keywords": [],
   "author": "",

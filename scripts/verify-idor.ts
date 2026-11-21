@@ -119,6 +119,7 @@ async function main(): Promise<void> {
     const cookieA = await login('student1@demo.local');
     const cookieB = await login('student2@demo.local');
     const cookieStaff = await login('staff@demo.local');
+    const cookieAdmin = await login('admin@demo.local');
 
     // Идентификаторы берём из данных: сид может меняться, тест — нет.
     async function requestIds(cookie: string): Promise<number[]> {
@@ -156,6 +157,27 @@ async function main(): Promise<void> {
       'сотрудник открывает очередь',
       (await status('/api/staff/requests', cookieStaff)) === 200,
       'ожидали 200',
+    );
+    // Админка — отдельная роль: ни студент, ни сотрудник деканата в неё не проходят.
+    check(
+      'студент не открывает админку',
+      (await status('/api/admin/lessons', cookieA)) === 403,
+      'ожидали 403',
+    );
+    check(
+      'сотрудник не открывает админку',
+      (await status('/api/admin/lessons', cookieStaff)) === 403,
+      'ожидали 403',
+    );
+    check(
+      'администратор открывает админку',
+      (await status('/api/admin/lessons', cookieAdmin)) === 200,
+      'ожидали 200',
+    );
+    check(
+      'без сессии админка недоступна',
+      (await status('/api/admin/teachers')) === 401,
+      'ожидали 401',
     );
     check('без сессии главная недоступна', (await status('/api/dashboard')) === 401, 'ожидали 401');
     check(
@@ -237,6 +259,155 @@ async function main(): Promise<void> {
       limited = response.status;
     }
     check('перебор по неизвестному адресу упирается в лимит', limited === 429, `11-я попытка: ${limited}`);
+
+    // Пересдачи: сданную дисциплину пересдать нельзя, а слоты по сданному
+    // не должны попадать в список — иначе вкладка предлагает записаться зря.
+    const retakesA = (await (
+      await fetch(`${BASE}/api/retakes`, { headers: { cookie: cookieA } })
+    ).json()) as { rows: { id: number; courseTitle: string; eligible: boolean; myBookingId: number | null }[] };
+    const retakesB = (await (
+      await fetch(`${BASE}/api/retakes`, { headers: { cookie: cookieB } })
+    ).json()) as { rows: { id: number; courseTitle: string; eligible: boolean; myBookingId: number | null }[] };
+
+    check(
+      'студенту не показывают слоты по сданным дисциплинам',
+      retakesA.rows.length > 0 && retakesA.rows.every((slot) => slot.eligible),
+      `слотов: ${retakesA.rows.map((slot) => slot.courseTitle).join(', ') || 'нет'}`,
+    );
+    check(
+      'у Дмитрия в списке только его долг',
+      retakesB.rows.length === 1 && retakesB.rows[0]!.courseTitle === 'Международная торговля',
+      `слотов: ${retakesB.rows.map((slot) => slot.courseTitle).join(', ') || 'нет'}`,
+    );
+
+    // Прямой запрос мимо UI: торговля у Анны сдана на 5, но её слот есть у Дмитрия.
+    // Записаться мимо формы нельзя — сервер проверяет зачётку, а не список в UI.
+    const tradeSlotId = retakesB.rows[0]!.id;
+    const bypass = await fetch(`${BASE}/api/retakes/${tradeSlotId}/book`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: cookieA },
+      body: JSON.stringify({}),
+    });
+    check(
+      'запись на пересдачу сданной дисциплины отклоняется',
+      bypass.status === 400,
+      `получили ${bypass.status}`,
+    );
+
+    // Переписка: обе стороны должны увидеть ответ в уведомлениях.
+    // Форма ответа задана сервером (server/index.ts), поэтому проверяем её здесь.
+    const readNotifications = async (
+      cookie: string,
+    ): Promise<{ unread: number; kinds: string[] }> => {
+      const response = await fetch(`${BASE}/api/notifications`, { headers: { cookie } });
+      const raw: unknown = await response.json();
+      if (!raw || typeof raw !== 'object' || !('unread' in raw) || !('rows' in raw)) {
+        throw new Error('неожиданный ответ /api/notifications');
+      }
+      const rows = Array.isArray(raw.rows) ? raw.rows : [];
+      const kinds = rows
+        .map((row) => (row && typeof row === 'object' && 'kind' in row ? String(row.kind) : ''))
+        .filter(Boolean);
+      const unread = typeof raw.unread === 'number' ? raw.unread : Number(raw.unread);
+      if (!Number.isFinite(unread)) throw new Error('unread не число');
+      return { unread, kinds };
+    };
+
+    const staffUnreadBefore = (await readNotifications(cookieStaff)).unread;
+    await fetch(`${BASE}/api/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: cookieA },
+      body: JSON.stringify({ body: 'Проверка уведомления для деканата' }),
+    });
+    const staffNotesAfter = await readNotifications(cookieStaff);
+    check(
+      'студент пишет — деканат получает уведомление',
+      staffNotesAfter.unread === staffUnreadBefore + 1,
+      `было ${staffUnreadBefore}, стало ${staffNotesAfter.unread}`,
+    );
+    check(
+      'уведомление о сообщении студента видно в списке',
+      staffNotesAfter.kinds.includes('message'),
+      `виды: ${staffNotesAfter.kinds.join(', ')}`,
+    );
+
+    const studentUnreadBefore = (await readNotifications(cookieA)).unread;
+    await fetch(`${BASE}/api/staff/dialogs/1/reply`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: cookieStaff },
+      body: JSON.stringify({ body: 'Ответ деканата для проверки' }),
+    });
+    check(
+      'деканат отвечает — студент получает уведомление',
+      (await readNotifications(cookieA)).unread === studentUnreadBefore + 1,
+      `было ${studentUnreadBefore}`,
+    );
+
+    // Открытие переписки гасит и счётчик сообщений, и уведомление о них.
+    await fetch(`${BASE}/api/messages`, { headers: { cookie: cookieA } });
+    const studentUnreadAfterRead = (await readNotifications(cookieA)).unread;
+    check(
+      'открытая переписка гасит уведомление о сообщении',
+      studentUnreadAfterRead < studentUnreadBefore + 1,
+      `стало ${studentUnreadAfterRead}`,
+    );
+
+    // Вложения заявок: файл видит только владелец и деканат.
+    const attachmentsB = (await (
+      await fetch(`${BASE}/api/requests/5`, { headers: { cookie: cookieB } })
+    ).json()) as { attachments: { id: number; fileName: string }[] };
+    const attachmentId = attachmentsB.attachments[0]?.id;
+    check(
+      'у заявки Дмитрия есть приложенный документ',
+      Boolean(attachmentId),
+      `файлов: ${attachmentsB.attachments.length}`,
+    );
+    if (attachmentId) {
+      check(
+        'автор скачивает свой документ',
+        (await status(`/api/requests/5/attachments/${attachmentId}`, cookieB)) === 200,
+        'ожидали 200',
+      );
+      check(
+        'другой студент не скачивает чужой документ',
+        (await status(`/api/requests/5/attachments/${attachmentId}`, cookieA)) === 404,
+        'ожидали 404',
+      );
+      check(
+        'деканат скачивает документ заявки',
+        (await status(`/api/staff/requests/5/attachments/${attachmentId}`, cookieStaff)) === 200,
+        'ожидали 200',
+      );
+    }
+
+    // Загрузка: чужую заявку, неподдерживаемый тип и выполненную заявку — отказ.
+    const pdfBytes = '%PDF-1.4\ntest\n%%EOF\n';
+    const uploadTo = (requestId: number, cookie: string, type = 'application/pdf') =>
+      fetch(`${BASE}/api/requests/${requestId}/attachments`, {
+        method: 'PUT',
+        headers: { 'content-type': type, 'x-file-name': encodeURIComponent('справка.pdf'), cookie },
+        body: pdfBytes,
+      });
+    check(
+      'студент прикладывает файл к своей заявке',
+      (await uploadTo(6, cookieB)).status === 201,
+      'ожидали 201',
+    );
+    check(
+      'файл к чужой заявке не принимается',
+      (await uploadTo(1, cookieB)).status === 404,
+      'ожидали 404',
+    );
+    check(
+      'неподдерживаемый тип файла отклоняется',
+      (await uploadTo(6, cookieB, 'application/zip')).status === 400,
+      'ожидали 400',
+    );
+    check(
+      'сотрудник не прикладывает файлы за студента',
+      (await uploadTo(6, cookieStaff)).status === 403,
+      'ожидали 403',
+    );
 
     // Новые разделы: пересдачи, документы, сообщения — тоже только свои.
     const studentADocs = await fetch(`${BASE}/api/documents`, { headers: { cookie: cookieA } });

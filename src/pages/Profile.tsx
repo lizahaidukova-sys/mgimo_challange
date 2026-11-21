@@ -11,7 +11,15 @@ export default function ProfilePage() {
   const rows = [
     { label: 'ФИО', value: user.fullName },
     { label: 'E-mail', value: user.email },
-    { label: 'Роль', value: user.role === 'staff' ? 'Сотрудник деканата' : 'Студент' },
+    {
+      label: 'Роль',
+      value:
+        user.role === 'admin'
+          ? 'Администратор концепта'
+          : user.role === 'staff'
+            ? 'Сотрудник деканата'
+            : 'Студент',
+    },
     ...(user.role === 'student'
       ? [
           { label: 'Факультет', value: user.faculty },

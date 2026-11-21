@@ -35,7 +35,7 @@ export default function LoginPage({ onSuccess }: { onSuccess: (user: SessionUser
       await api.post<{ ok: boolean; role: string }>('/api/login', { email, password });
       const user = await api.get<SessionUser>('/api/me');
       onSuccess(user);
-      navigate(user.role === 'staff' ? '/staff' : '/', { replace: true });
+      navigate(user.role === 'student' ? '/' : '/staff', { replace: true });
     } catch (caught) {
       const message =
         caught instanceof ApiError ? caught.message : 'Не удалось войти. Повторите попытку.';
