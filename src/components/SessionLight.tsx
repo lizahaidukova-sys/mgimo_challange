@@ -23,6 +23,7 @@ export function statusVariant(status: string): 'neutral' | 'accent' | 'success' 
 const severityMap = {
   green: {
     label: 'Низкий риск',
+    short: 'Норма',
     icon: CheckCircle2,
     className: 'border-[var(--success)]/25 bg-[var(--success-soft)]',
     iconClass: 'text-[var(--success)]',
@@ -30,6 +31,7 @@ const severityMap = {
   },
   yellow: {
     label: 'Требует внимания',
+    short: 'Внимание',
     icon: CircleDot,
     className: 'border-[var(--warning)]/25 bg-[var(--warning-soft)]',
     iconClass: 'text-[var(--warning)]',
@@ -37,6 +39,7 @@ const severityMap = {
   },
   red: {
     label: 'Высокий риск',
+    short: 'Риск',
     icon: AlertTriangle,
     className: 'border-[var(--error)]/25 bg-[var(--error-soft)]',
     iconClass: 'text-[var(--error)]',
@@ -56,11 +59,14 @@ export function SessionLight({ state, compact = false }: { state: SessionState; 
       <div className="flex items-start gap-3">
         <Icon className={cn('mt-0.5 size-5 shrink-0', config.iconClass)} aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <h2 id="session-light-title" className="text-base font-semibold">
               {state.headline}
             </h2>
-            <Badge variant={config.badge}>{config.label}</Badge>
+            <Badge variant={config.badge}>
+              <span className="min-[400px]:hidden">{config.short}</span>
+              <span className="hidden min-[400px]:inline">{config.label}</span>
+            </Badge>
           </div>
           <p className="mt-1 text-sm text-[var(--fg)]/85">{state.explanation}</p>
 

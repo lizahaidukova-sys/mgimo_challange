@@ -48,7 +48,7 @@ export function AppShell() {
   return (
     <div className="min-h-dvh bg-[var(--bg)]">
       <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-4">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 lg:px-6">
           <button
             type="button"
             onClick={() => navigate(user.role === 'staff' ? '/staff' : '/')}
@@ -58,10 +58,10 @@ export function AppShell() {
             <span className="grid h-8 w-8 place-items-center rounded-[8px] bg-[var(--accent)] text-sm font-semibold text-white">
               Д+
             </span>
-            <span className="text-sm font-semibold">Деканат+</span>
+            <span className="hidden text-sm font-semibold min-[380px]:inline">Деканат+</span>
           </button>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1">
             {user.role === 'student' ? <SearchBox /> : null}
             {user.role === 'student' ? (
               <NavLink
@@ -98,7 +98,7 @@ export function AppShell() {
 
       {user.role === 'student' ? (
         <div className="border-b border-[var(--border)] bg-[var(--surface)] md:hidden">
-          <ul className="mx-auto flex max-w-3xl gap-1.5 overflow-x-auto px-4 py-2">
+          <ul className="mx-auto flex max-w-6xl gap-1.5 overflow-x-auto px-4 py-2">
             {studentExtra.map((item) => (
               <li key={item.to}>
                 <NavLink
@@ -125,7 +125,8 @@ export function AppShell() {
         className="sticky top-14 z-20 hidden border-b border-[var(--border)] bg-[var(--surface)] md:block"
         aria-label="Разделы"
       >
-        <ul className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-4">
+        <ul className="mx-auto flex max-w-6xl gap-1 px-4 lg:px-6">
+          {/* Пункты меню не сжимаются: иначе «Расписание» рвётся по слогам. */}
           {[...nav, ...(user.role === 'student' ? studentExtra : [])].map((item) => (
             <li key={item.to}>
               <NavLink
@@ -133,14 +134,14 @@ export function AppShell() {
                 end={item.end}
                 className={({ isActive }) =>
                   cn(
-                    'flex h-11 items-center gap-2 border-b-2 px-3 text-sm font-medium',
+                    'flex h-11 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm font-medium',
                     isActive
                       ? 'border-[var(--accent)] text-[var(--accent)]'
                       : 'border-transparent text-[var(--muted)] hover:text-[var(--fg)]',
                   )
                 }
               >
-                <item.icon className="size-4" />
+                <item.icon className="size-4 shrink-0" />
                 {item.label}
               </NavLink>
             </li>
@@ -148,7 +149,7 @@ export function AppShell() {
         </ul>
       </nav>
 
-      <main className="app-main mx-auto max-w-3xl px-4 py-4">
+      <main className="app-main mx-auto max-w-6xl px-4 py-4 lg:px-6">
         <Outlet />
         <footer className="mt-8 border-t border-[var(--border)] pt-4 text-xs leading-relaxed text-[var(--muted)]">
           Концепт для конкурса MGIMO AI Challenge. Не официальный сервис МГИМО. Все данные
@@ -160,7 +161,7 @@ export function AppShell() {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)] md:hidden"
         aria-label="Основная навигация"
       >
-        <ul className="mx-auto grid max-w-3xl grid-cols-4">
+        <ul className="mx-auto grid max-w-6xl grid-cols-4">
           {nav.map((item) => (
             <li key={item.to}>
               <NavLink

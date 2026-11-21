@@ -104,9 +104,9 @@ export default function DashboardPage() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <CalendarClock className="size-4 text-[var(--muted)]" />
+          <CardHeader className="flex-row items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 whitespace-nowrap">
+              <CalendarClock className="size-4 shrink-0 text-[var(--muted)]" />
               Ближайшая пара
             </CardTitle>
             <Link
@@ -152,9 +152,9 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <GraduationCap className="size-4 text-[var(--muted)]" />
+          <CardHeader className="flex-row items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 whitespace-nowrap">
+              <GraduationCap className="size-4 shrink-0 text-[var(--muted)]" />
               Семестр
             </CardTitle>
             <Link
