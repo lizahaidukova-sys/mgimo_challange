@@ -4,6 +4,8 @@
 
 **Живой прототип:** https://khaydukova.bitinterkgm.com — тестовые аккаунты и пароль на странице входа.
 
+**Исходный код:** https://github.com/lizahaidukova-sys/mgimo_challange/tree/dev — ветка `dev`, 29 коммитов, история по итерациям.
+
 ---
 
 ## 1. Какую проблему решает кабинет
@@ -218,6 +220,8 @@
 Подробно — `docs/08-limits.md`.
 
 ## 11. Проверки, которые можно повторить
+
+Склонировать и повторить: `git clone https://github.com/lizahaidukova-sys/mgimo_challange.git -b dev`.
 
 ```bash
 npm install && npm run seed   # lock собран на Windows, на Linux надёжнее install

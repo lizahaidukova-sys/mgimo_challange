@@ -21,9 +21,13 @@ https://khaydukova.bitinterkgm.com
 
 ## Исходный код
 
-Зип-архив `dean-office-source.zip` (9,3 МБ, 144 файла) — приложить ссылкой на Яндекс Диск вместе с остальными файлами.
+**Репозиторий:** https://github.com/lizahaidukova-sys/mgimo_challange/tree/dev
 
-Внутри: код, документация (`docs/`), проверки (`npm run verify`), установщик (`deploy/`). Запуск:
+Ветка `dev`, 29 коммитов, публичный доступ без регистрации. История показывает ход работы по итерациям, а не один финальный слепок.
+
+Что внутри: код (`server/`, `src/`, `shared/`), документация (`docs/`, `.ai/prompts/`), проверки (`scripts/`), установщик (`deploy/`), собранное описание работы и два видео.
+
+Запуск:
 
 ```bash
 cp .env.example .env      # вписать SESSION_SECRET
@@ -32,6 +36,8 @@ npm run seed
 npm run build
 npm start                 # http://localhost:8787
 ```
+
+**Резервная копия:** зип-архив `dean-office-source.zip` (9,3 МБ, 144 файла) на Яндекс Диске — то же содержимое ветки `dev`, если GitHub недоступен.
 
 ## Описание работы
 

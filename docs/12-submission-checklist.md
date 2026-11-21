@@ -49,24 +49,27 @@
 
 | Шаг | Команда | Готово |
 |---|---|---|
-| **Вариант А:** создать репозиторий на GitHub или GitVerse | — | ☐ |
-| **Вариант Б (без GitHub):** архив на Яндекс Диске | готов: `_submission/dean-office-source.zip` | ✓ |
-| Запушить (если вариант А) | `git remote add origin <url> && git push -u origin main` | ☐ |
-| Проверить доступ жюри | открыть в приватном окне без своего аккаунта | ☐ |
-| Убедиться, что `.env` и база не попали | `git ls-files | grep -E '\.env$|\.db'` → пусто | ☐ |
-| README читается без контекста | открыть README на GitHub | ☐ |
+| **Вариант А:** репозиторий на GitHub | `github.com/lizahaidukova-sys/mgimo_challange`, ветка `dev` | ✓ 21.11, 29 коммитов |
+| **Вариант Б (резерв):** архив на Яндекс Диске | `_submission/dean-office-source.zip` (9,3 МБ, 144 файла) | ✓ |
+| Запушить в `dev` | `git remote add origin git@github.com:<owner>/<repo>.git && git push -u origin dev` | ✓ |
+| Проверить доступ жюри | открыть в приватном окне без своего аккаунта | ✓ репозиторий публичный, страница открывается |
+| Убедиться, что `.env` и база не попали | `git ls-tree -r --name-only origin/dev \| grep -E '^\.env$\|\.db$\|^data/'` → пусто | ✓ пусто |
+| README читается без контекста | открыть README на GitHub | ✓ |
+| Авторство коммитов | `git log --format='%an' \| sort -u` → одна запись | ✓ 29 коммитов от Liza |
 
-Проверено локально на чистом клоне: `npm ci` (11 с, без компилятора) → `npm run seed` → `npm run build` → `npm start` → `/api/health` 200, вход 200, главная 200, чужая заявка 404.
+Проверено локально на чистом клоне: `npm install` → `npm run seed` → `npm run build` → `npm start` → `/api/health` 200, вход 200, главная 200, чужая заявка 404.
+
+Ссылка для заявки: `https://github.com/lizahaidukova-sys/mgimo_challange/tree/dev`
 
 ## 4. Что прикладывается к работе
 
 | Артефакт | Где лежит | Готово |
 |---|---|---|
-| Ссылка на прототип | `docs/10-deploy.md`, шаг 2 | ☐ |
-| Тестовые аккаунты (в комментарии к работе) | четыре адреса и пароль, включая `admin@demo.local` | ☐ |
-| Ссылка на репозиторий | шаг 3 | ☐ |
-| Описание процесса, PDF со скриншотами | `docs/jury.pdf` (12 страниц) | готово |
-| Видео до 5 минут | два файла: `docs/demo/demo-mobile.mp4` и `demo-desktop.mp4` — выложить на YouTube/VK/RuTube/Диск | ☐ |
+| Ссылка на прототип | `docs/10-deploy.md`, шаг 2 | ✓ https://khaydukova.bitinterkgm.com |
+| Тестовые аккаунты (в комментарии к работе) | четыре адреса и пароль, включая `admin@demo.local` | ✓ текст готов |
+| Ссылка на репозиторий | шаг 3 | ✓ ветка `dev` |
+| Описание процесса, PDF со скриншотами | `docs/jury.pdf` (12 страниц) | ✓ |
+| Видео до 5 минут | два файла: `docs/demo/demo-mobile.mp4` и `demo-desktop.mp4` — выложить на YouTube/VK/RuTube/Диск | ☐ осталось выложить |
 | Текст для формы отправки | `docs/13-submission-text.md` — скопировать | ✓ |
 
 ## 5. Порядок отправки
