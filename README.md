@@ -73,6 +73,7 @@ npm start                     # API и статика на :8787
 | `deploy/` | `install.sh`, unit-файл systemd, Caddyfile |
 | `docs/11-video-script.md` | сценарий видео и запись через `record:demo` |
 | `docs/12-submission-checklist.md` | чек-лист отправки: документы, хостинг, репозиторий |
+| `docs/13-submission-text.md` | готовый текст для формы отправки |
 | `docs/jury.pdf` | готовый PDF для жюри (собирается: `npm run build:jury`) |
 | `docs/demo/demo.mp4` | демонстрация работы (запись: `npm run record:demo`) |
 

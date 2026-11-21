@@ -12,8 +12,6 @@ dean.example.ru {
 		-Server
 	}
 
-	# Статика кэшируется, HTML — нет: иначе после reseed жюри видит старую сборку.
-	@assets path /assets/*
-	header @assets Cache-Control "public, max-age=31536000, immutable"
-	header / Cache-Control "no-store"
+	# Кэш-политику выставляет приложение: два Cache-Control на один ответ
+	# сбивают браузер и прокси.
 }

@@ -336,11 +336,31 @@ app.get('/api/demo-accounts', (_req, res) => {
 
 // Раздача собранного фронтенда в production.
 // Express 5 не принимает regexp-маршруты — используем обычный middleware.
+// Кэш-политика живёт здесь, а не в reverse proxy: иначе на одном ответе
+// оказываются два разных Cache-Control (Caddy + Express).
 const distDir = path.resolve('dist');
 if (fs.existsSync(distDir)) {
-  app.use(express.static(distDir));
+  app.use(
+    '/assets',
+    express.static(path.join(distDir, 'assets'), {
+      immutable: true,
+      maxAge: '365d',
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      },
+    }),
+  );
+  app.use(
+    express.static(distDir, {
+      // index.html и прочие файлы не кэшируются: после reseed нужна свежая сборка.
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-store');
+      },
+    }),
+  );
   app.use((req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
+    res.setHeader('Cache-Control', 'no-store');
     res.sendFile(path.join(distDir, 'index.html'));
   });
 }
